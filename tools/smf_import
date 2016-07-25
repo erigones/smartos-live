@@ -47,7 +47,7 @@ ${SVCCFG} -s "smartdc/mdata:fetch" setprop general/enabled=false
 ${SVCCFG} -s "smartdc/mdata:execute" setprop general/enabled=false
 
 # ErigonOS does not need Ur-agent
-${SVCCFG} -s "smartdc/agent/ur" setprop general/enabled=false
+${SVCCFG} -s "smartdc/agent/ur:default" setprop general/enabled=false
 
 # ${SVCCFG} -s "system/manifest-import" setprop start/exec=:true
 ${SVCCFG} -v apply ${rdmnt}/etc/svc/profile/generic.xml
