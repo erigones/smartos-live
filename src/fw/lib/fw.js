@@ -170,7 +170,24 @@ function dedupRules(list1, list2) {
 }
 
 
-/*
+/**
+ * Given a list of new rules and a map of existing rules, build a list
+ * of the subset of new rules that are actually changing anything.
+ */
+function getChangingRules(rules, existingRules, cb) {
+    var changing = rules.filter(function (rule) {
+        if (!existingRules.hasOwnProperty(rule.uuid)) {
+            return true;
+        }
+        return !mod_obj.shallowObjEqual(rule.serialize(),
+            existingRules[rule.uuid].serialize());
+    });
+
+    cb(null, changing);
+}
+
+
+/**
  * This filter removes rules that aren't affected by adding a remote VM
  * or updating a local VM (for example, simple wildcard rules), and would
  * therefore require updating the rules of other VMs. This table shows which
@@ -210,23 +227,18 @@ function getAffectedRules(new_vms, log) {
                 || rule.from.vms.length > 0;
         }
         return false;
-    }
+    };
 }
 
 
 /**
  * Starts ipf and reloads the rules for a VM
  */
-function startIPF(opts, log, callback) {
+function reloadIPF(opts, log, callback) {
     var ipfConf = util.format(IPF_CONF, opts.zonepath);
     var ipf6Conf = util.format(IPF6_CONF, opts.zonepath);
 
-    return mod_ipf.start(opts.vm, log, function (err, res) {
-        if (err) {
-            return callback(err, res);
-        }
-        return mod_ipf.reload(opts.vm, ipfConf, ipf6Conf, log, callback);
-    });
+    mod_ipf.reload(opts.vm, ipfConf, ipf6Conf, log, callback);
 }
 
 
@@ -652,6 +664,10 @@ function loadDataFromDisk(log, callback) {
                 loadAllRules(log, function (err, res) {
                     if (res) {
                         onDisk.rules = res;
+                        onDisk.rulesByUUID = {};
+                        onDisk.rules.forEach(function (rule) {
+                            onDisk.rulesByUUID[rule.uuid] = rule;
+                        });
                     }
 
                     return cb(err);
@@ -693,30 +709,24 @@ function findRules(opts, log, callback) {
 
     var errs = [];
     var found = {};
-    var uuids = {};
+    var missing = {};
+
     rules.forEach(function (r) {
         if (!r.hasOwnProperty('uuid')) {
             errs.push(new verror.VError('Missing UUID of rule: %j', r));
             return;
         }
-        uuids[r.uuid] = 1;
-    });
-    log.debug(uuids, 'findRules: rules');
 
-    allRules.forEach(function (r) {
-        if (!r.hasOwnProperty('uuid')) {
-            errs.push(new verror.VError('Missing UUID of rule: %j', r));
-        }
-
-        if (uuids.hasOwnProperty(r.uuid)) {
-            delete uuids[r.uuid];
-            found[r.uuid] = r;
+        if (allRules.hasOwnProperty(r.uuid)) {
+            found[r.uuid] = allRules[r.uuid];
+        } else {
+            missing[r.uuid] = 1;
         }
     });
 
     // If we're allowing adds, missing rules aren't an error
-    if (!allowAdds && !objEmpty(uuids)) {
-        Object.keys(uuids).forEach(function (uuid) {
+    if (!allowAdds && !objEmpty(missing)) {
+        Object.keys(missing).forEach(function (uuid) {
             errs.push(new verror.VError('Unknown rule: %s', uuid));
         });
     }
@@ -724,18 +734,19 @@ function findRules(opts, log, callback) {
     if (log.debug()) {
         var ret = { rules: found };
         if (allowAdds) {
-            ret.adds = Object.keys(uuids);
+            ret.adds = Object.keys(missing);
         } else {
-            ret.missing = Object.keys(uuids);
+            ret.missing = Object.keys(missing);
         }
         log.debug(ret, 'findRules: return');
     }
 
     if (errs.length !== 0) {
-        return callback(util_err.createMultiError(errs));
+        callback(util_err.createMultiError(errs));
+        return;
     }
 
-    return callback(null, found);
+    callback(null, found);
 }
 
 
@@ -1350,18 +1361,19 @@ function restartFirewalls(vms, uuids, log, callback) {
                 + '(enabled=%s, state=%s)', uuid, vms.all[uuid].enabled,
                 vms.all[uuid].state);
 
-            // Start the firewall just in case
-            return startIPF({ vm: uuid, zonepath: vms.all[uuid].zonepath },
+            // Reload the firewall, and start it if necessary.
+            reloadIPF({ vm: uuid, zonepath: vms.all[uuid].zonepath },
                 log, function (err, res) {
-                    restarted.push(uuid);
-                    if (err && zoneNotRunning(res)) {
-                        // An error starting the firewall due to the zone not
-                        // running isn't really an error
-                        return cb();
-                    }
+                restarted.push(uuid);
+                if (err && zoneNotRunning(res)) {
+                    // An error starting the firewall due to the zone not
+                    // running isn't really an error
+                    cb();
+                    return;
+                }
 
-                    return cb(err);
-                });
+                cb(err);
+            });
         }
     }, function (err, res) {
         // XXX: Does this stop on the first error?
@@ -1570,7 +1582,8 @@ function add(opts, callback) {
         function lock(_, cb) {
             mod_lock.acquireExclusiveLock(cb);
         },
-        function rules(_, cb) {
+
+        function originalRules(_, cb) {
             createRules(opts.rules, opts.createdBy, cb);
         },
 
@@ -1578,8 +1591,15 @@ function add(opts, callback) {
 
         function disk(_, cb) { loadDataFromDisk(log, cb); },
 
+        // If we're trying to add a rule that already exists and looks
+        // the same, drop it.
+        function rules(res, cb) {
+            getChangingRules(res.originalRules, res.disk.rulesByUUID, cb);
+        },
+
         function newRemoteVMs(res, cb) {
-            mod_rvm.create(res.vms, opts.remoteVMs, log, cb);
+            mod_rvm.create({ allVMs: res.vms, requireIPs: true, log: log },
+                opts.remoteVMs, cb);
         },
 
         // Create remote VMs (if any) from payload
@@ -2264,7 +2284,7 @@ function update(opts, callback) {
         // Make sure the rules exist
         function originalRules(res, cb) {
             findRules({
-                allRules: res.disk.rules,
+                allRules: res.disk.rulesByUUID,
                 allowAdds: opts.allowAdds,
                 rules: opts.rules
             }, log, cb);
@@ -2289,7 +2309,8 @@ function update(opts, callback) {
 
         // Create remote VMs (if any) from payload
         function newRemoteVMs(res, cb) {
-            mod_rvm.create(res.vms, opts.remoteVMs, log, cb);
+            mod_rvm.create({ allVMs: res.vms, requireIPs: true, log: log },
+                opts.remoteVMs, cb);
         },
 
         // Create a lookup for the new remote VMs
@@ -2454,15 +2475,14 @@ function getRemoteTargets(opts, callback) {
         }
 
         var targets = {};
-        var rules = res.state.rules;
-        var vms = res.state.vms;
 
-        for (var r in rules) {
-            var rule = rules[r];
+        for (var r in res.state.rules) {
+            var rule = res.state.rules[r];
 
             for (var d in DIRECTIONS) {
                 var dir = DIRECTIONS[d];
-                addOtherSideRemoteTargets(vms, rule, targets, dir, log);
+                addOtherSideRemoteTargets(
+                    res.state.vms, rule, targets, dir, log);
             }
         }
 
@@ -2575,8 +2595,8 @@ function getRemoteVMrules(opts, callback) {
             return mod_rvm.load(opts.remoteVM, log, cb);
         },
         function rvms(state, cb) {
-            return mod_rvm.create(state.vms, [ state.rvm ],
-                log, function (e, rvmList) {
+            mod_rvm.create({ allVMs: state.vms, requireIPs: false, log: log },
+                [ state.rvm ], function (e, rvmList) {
                 if (e) {
                     return cb(e);
                 }
@@ -2699,7 +2719,8 @@ function validatePayload(opts, callback) {
         function vms(_, cb) { createVMlookup(opts.vms, log, cb); },
         function remoteVMs(_, cb) { mod_rvm.loadAll(log, cb); },
         function newRemoteVMs(state, cb) {
-            mod_rvm.create(state.vms, opts.remoteVMs, log, cb);
+            mod_rvm.create({ allVMs: state.vms, requireIPs: true, log: log },
+                opts.remoteVMs, cb);
         },
         // Create a combined remote VM lookup of remote VMs on disk plus
         // new remote VMs in the payload
