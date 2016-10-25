@@ -18,7 +18,7 @@ fatal(msg)
 function
 usage()
 {
-	console.log('usage: ' + process.argv[0] + '[-f] <pool> <file.json>');
+	console.log('usage: ' + process.argv[0] + '[-f] [-R <altroot>] <pool> <file.json>');
 	process.exit(-1);
 }
 
@@ -28,13 +28,16 @@ var pool;
 
 var option;
 var opt_f = false;
-var parser = new getopt.BasicParser('f', process.argv);
+var parser = new getopt.BasicParser('fR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
 	switch (option.option) {
 	case 'f':
 		opt_f = true;
-		break;
+		continue;
+    case 'R':
+        altrot = option;
+        continue;
 	default:
 		usage();
 		break;
