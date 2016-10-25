@@ -2,6 +2,7 @@
 
 /*
  * Copyright 2012 Joyent, Inc.  All rights reserved.
+ * Copyright 2016 Erigones, s. r. o. All rights reserved.
  */
 
 var fs = require('fs');
