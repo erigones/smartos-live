@@ -40,7 +40,7 @@ while ((option = parser.getopt()) !== undefined && !option.error) {
 		continue;
     case 'R':
         opt_R = true;
-        altroot = option;
+        altroot = option.optarg;
         continue;
 	default:
 		usage();
