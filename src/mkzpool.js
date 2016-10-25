@@ -26,9 +26,11 @@ usage()
 var json;
 var config;
 var pool;
+var altroot;
 
 var option;
 var opt_f = false;
+var opt_R = false;
 var parser = new getopt.BasicParser('fR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
@@ -37,7 +39,8 @@ while ((option = parser.getopt()) !== undefined && !option.error) {
 		opt_f = true;
 		continue;
     case 'R':
-        altrot = option;
+        opt_R = true;
+        altroot = option;
         continue;
 	default:
 		usage();
@@ -55,8 +58,17 @@ pool = process.argv[parser.optind()];
 json = fs.readFileSync(process.argv[parser.optind() + 1], 'utf8');
 config = JSON.parse(json);
 
-zfs.zpool.create(pool, config, opt_f, function (err) {
-	if (err) {
-		fatal('pool creation failed: ' + err);
-	}
-});
+if (opt_R !== true) {
+    zfs.zpool.create(pool, config, opt_f, function (err) {
+        if (err) {
+            fatal('pool creation failed: ' + err);
+        }
+    });
+} else {
+    zfs.zpool.rcreate(pool, config, opt_f, altroot, function (err) {
+        if (err) {
+            fatal('pool creation failed: ' + err);
+        }
+    });
+}
+
