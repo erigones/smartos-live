@@ -1,6 +1,4 @@
 mkdir -p projects/local
-(cd projects/local >/dev/null && [[ -d ur-agent ]] \
-    || git clone git://github.com/joyent/sdc-ur-agent.git ur-agent)
 (cd projects/local >/dev/null && [[ -d kvm ]] \
     || git clone git://github.com/joyent/illumos-kvm.git kvm)
 (cd projects/local >/dev/null && [[ -d kvm-cmd ]] \
@@ -14,7 +12,7 @@ if [[ ! -f configure-branches ]]; then
 # after editing, rerun configure
 illumos-live: master
 illumos-extra: master
-illumos-joyent: origin/master
+illumos-joyent: master
 ur-agent: master
 kvm: master
 kvm-cmd: master
@@ -27,8 +25,7 @@ RELEASE_VER="dcdos_147"
 SUNW_SPRO12_URL="https://download.joyent.com/pub/build/SunStudio.tar.bz2"
 ON_CLOSED_BINS_URL="https://download.joyent.com/pub/build/illumos/on-closed-bins.i386.tar.bz2"
 ON_CLOSED_BINS_ND_URL="https://download.joyent.com/pub/build/illumos/on-closed-bins-nd.i386.tar.bz2"
-#GET_ILLUMOS="git clone git://github.com/joyent/illumos-joyent.git illumos"
-GET_ILLUMOS="git clone gitlab@gitlab.erigones.com:erigones/illumos-gate.git illumos"
+GET_ILLUMOS="git clone git@github.com:erigones/illumos-joyent.git illumos"
 GET_ILLUMOS_EXTRA="git clone git://github.com/joyent/illumos-extra.git illumos-extra"
 ILLUMOS_ADJUNCT_TARBALL_URL="https://download.joyent.com/pub/build/adjuncts/"
 OVERLAYS="erigonos generic"
