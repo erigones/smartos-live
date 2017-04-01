@@ -106,7 +106,6 @@ d smartdc/bin 0555 root bin
 f smartdc/bin/sdc-factoryreset 0555 root bin
 f smartdc/bin/sdc-lastcomm 0555 root bin
 f smartdc/bin/sdc-zfs-io-throttle.d 0555 root bin
-f smartdc/lib/smartos_prompt_config.sh 0555 root bin
 d smartdc/man 0555 root bin
 d smartdc/man/man1 0555 root bin
 f smartdc/man/man1/sdc-lastcomm.1 0444 root bin

@@ -338,7 +338,7 @@ function safe_update_symlink
 }
 
 # Create tmp dir to do the work in
-rddir="/tmp/create_ramdisk.$$.tmp"
+rddir="${TMPDIR:-/var/tmp}/create_ramdisk.$$.tmp"
 rm -rf "$rddir"
 mkdir "$rddir" || fatal_error "Could not create temporary directory $rddir"
 

@@ -2,6 +2,7 @@
 
 /*
  * Copyright 2012 Joyent, Inc.  All rights reserved.
+ * Copyright 2016 Erigones, s. r. o. All rights reserved.
  */
 
 var fs = require('fs');
@@ -18,23 +19,29 @@ fatal(msg)
 function
 usage()
 {
-	console.log('usage: ' + process.argv[0] + '[-f] <pool> <file.json>');
+	console.log('usage: ' + process.argv[0] + '[-f] [-R <altroot>] <pool> <file.json>');
 	process.exit(-1);
 }
 
 var json;
 var config;
 var pool;
+var altroot;
 
 var option;
 var opt_f = false;
-var parser = new getopt.BasicParser('f', process.argv);
+var opt_R = false;
+var parser = new getopt.BasicParser('fR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
 	switch (option.option) {
 	case 'f':
 		opt_f = true;
-		break;
+		continue;
+    case 'R':
+        opt_R = true;
+        altroot = option.optarg;
+        continue;
 	default:
 		usage();
 		break;
@@ -51,8 +58,17 @@ pool = process.argv[parser.optind()];
 json = fs.readFileSync(process.argv[parser.optind() + 1], 'utf8');
 config = JSON.parse(json);
 
-zfs.zpool.create(pool, config, opt_f, function (err) {
-	if (err) {
-		fatal('pool creation failed: ' + err);
-	}
-});
+if (opt_R !== true) {
+    zfs.zpool.create(pool, config, opt_f, function (err) {
+        if (err) {
+            fatal('pool creation failed: ' + err);
+        }
+    });
+} else {
+    zfs.zpool.rcreate(pool, config, opt_f, altroot, function (err) {
+        if (err) {
+            fatal('pool creation failed: ' + err);
+        }
+    });
+}
+
