@@ -76,14 +76,14 @@ function mount_zfs
     echo ${output} 1>&2
 }
 
-# Assume the system zpool is zones, but if a different system pool
-# identifies itself (by virtue of the .system_pool file being present in the
-# pool's root dataset), then use that system pool instead.
-SYS_ZPOOL=zones
-
 /bin/bootparams | grep "^noimport=true" >/dev/null
 if [ $? -ne 0 ]; then
     # If the zpool doesn't exist, then there's nothing to mount.
+
+    # Assume the system zpool is zones, but if a different system pool
+    # identifies itself (by virtue of the .system_pool file being present in the
+    # pool's root dataset), then use that system pool instead.
+    SYS_ZPOOL=zones
 
     # Import specified zpools, or all zpools available
     pools=$(/bin/bootparams | egrep "^zpools?=" | cut -d= -f2 | tr , ' ')
@@ -246,7 +246,7 @@ mkdir -p ${USBMOUNTPOINT}
 if [[ -f "${USBMOUNTPOINT}/.joyliveusb" ]]; then
     mount_usb_msg="already mounted"
 
-    zpool list | grep ${SYS_ZPOOL}
+    zpool list | grep zones
     if [[ $? == 0 ]]; then
         make_usb_copy
         exit $?
@@ -310,7 +310,7 @@ fi
 if [[ -f "${USBMOUNTPOINT}/.joyliveusb" ]]; then
     mount_usb_msg="success"
 
-    zpool list | grep ${SYS_ZPOOL}
+    zpool list | grep zones
 
     if [[ $? == 0 ]]; then
         make_usb_copy
