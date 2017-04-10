@@ -13,7 +13,6 @@ if [[ ! -f configure-branches ]]; then
 illumos-live: master
 illumos-extra: master
 illumos-joyent: master
-ur-agent: master
 kvm: master
 kvm-cmd: master
 mdata-client: master
