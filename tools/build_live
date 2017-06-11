@@ -724,7 +724,6 @@ fi
 if (( ${#bi_in_dirs[@]} < 1 )); then
 	fail 'at least one input directory is required'
 fi
->>>>>>> upstream/release-20170525
 
 bi_big_banner 'Building platform image'
 
