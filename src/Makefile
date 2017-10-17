@@ -10,7 +10,7 @@
 #
 
 #
-# Copyright 2017 Joyent, Inc.
+# Copyright (c) 2017, Joyent, Inc.
 #
 
 include Makefile.defs
@@ -39,7 +39,8 @@ JSSTYLE_OLDSKOOL_OPTS =
 # without extra effort; it is overridden when make is invoked in this
 # subdirectory.
 #
-DESTDIR =		../proto
+# This should be an absolute path, or building $(SUBDIRS) will fail
+DESTDIR =		$(realpath ../proto)
 
 #
 # DESTNAME is used for the manifest target.  We set it to something
@@ -82,6 +83,7 @@ JS_CHECK_TARGETS=\
 	vm/sbin/*.js \
 	vm/node_modules/dladm.js \
 	vm/node_modules/expander.js \
+	vm/node_modules/hrtime.js \
 	vm/node_modules/ip.js \
 	vm/node_modules/nic.js \
 	vm/node_modules/proptable.js \
@@ -91,6 +93,7 @@ JS_CHECK_TARGETS=\
 	vm/node_modules/openonerrlogger.js \
 	vm/node_modules/vmload/*.js \
 	vm/node_modules/sysevent-stream.js \
+	vm/node_modules/zonecfg.js \
 	img/lib/*.js \
 	img/sbin/imgadm \
 	vm/common/nictag.js \
@@ -100,6 +103,7 @@ JS_CHECK_TARGETS=\
 	vm/tests/test-create-filesystems.js \
 	vm/tests/test-docker.js \
 	vm/tests/test-defaults.js \
+	vm/tests/test-hrtime.js \
 	vm/tests/test-indestructible.js \
 	vm/tests/test-internal_metadata_namespaces.js \
 	vm/tests/test-lastexited.js \
@@ -131,7 +135,8 @@ C_CHECK_TARGETS=\
 	sysevent.c \
 	dockerinit/src/dockerexec.c \
 	dockerinit/src/dockerinit.c \
-	dockerinit/src/docker-common.c
+	dockerinit/src/docker-common.c \
+	lx_hook_postnet/main.c
 
 #
 # Generic flags we apply by default to everything.
@@ -303,7 +308,7 @@ SMARTDC_LIB_TARGETS = \
 #
 # Subdirectory management
 #
-SUBDIRS = dockerinit routeinfo
+SUBDIRS = dockerinit routeinfo lx_hook_postnet
 
 SUBDIRS_ENV = \
 	CTFCONVERT=$(CTFCONVERT) \
@@ -412,6 +417,7 @@ install: all $(SUBDIRS)
 	mkdir -m 0755 -p $(DESTDIR)/usr/lib/sdc
 	cp -p net-boot-config $(DESTDIR)/usr/lib/sdc
 	cd routeinfo && $(MAKE) install $(SUBDIRS_ENV)
+	cd lx_hook_postnet && $(MAKE) install $(SUBDIRS_ENV)
 	mkdir -p $(SYSINFO_MOD_DIR)
 	rm -f $(SYSINFO_MOD_DIR)/sysinfo_mod.so
 	/usr/sbin/install -f $(SYSINFO_MOD_DIR) -m 0555 sysinfo_mod.so
