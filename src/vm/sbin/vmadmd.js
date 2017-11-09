@@ -266,6 +266,7 @@ function spawnRemoteDisplay(vmobj)
     var server;
     var sockpath;
     var zonepath = vmobj.zonepath;
+    var vnc_listen_address = SDC.sysinfo['VM VNC Listen Address'] || SDC.sysinfo.admin_ip;
 
     if (!vmobj.zonepath) {
         zonepath = '/zones/' + vmobj.uuid;
@@ -326,7 +327,7 @@ function spawnRemoteDisplay(vmobj)
     });
 
     log.info('spawning ' + protocol + ' listener for ' + vmobj.uuid
-        + ' on ' + SDC.sysinfo.admin_ip);
+        + ' on ' + vnc_listen_address);
 
     // Before we start the listener, set the password if needed.
 
@@ -349,11 +350,11 @@ function spawnRemoteDisplay(vmobj)
             + sock.remoteAddress + ']:' + sock.remotePort);
     });
 
-    server.listen(port, SDC.sysinfo.admin_ip, function () {
+    server.listen(port, vnc_listen_address, function () {
         addr = server.address();
 
         if (protocol == 'vnc') {
-            VNC[vmobj.uuid] = {'host': SDC.sysinfo.admin_ip, 'port': addr.port,
+            VNC[vmobj.uuid] = {'host': vnc_listen_address, 'port': addr.port,
                 'server': server};
             if (addr.port >= 5900) {
                 // only add the display number when it's non-negative
@@ -367,7 +368,7 @@ function spawnRemoteDisplay(vmobj)
             log.debug('VNC details for ' + vmobj.uuid + ': '
                 + util.inspect(VNC[vmobj.uuid]));
         } else if (protocol == 'spice') {
-            SPICE[vmobj.uuid] = {'host': SDC.sysinfo.admin_ip,
+            SPICE[vmobj.uuid] = {'host': vnc_listen_address,
                 'port': addr.port, 'server': server};
             if (vmobj.hasOwnProperty('spice_password')
                 && vmobj.spice_password.length > 0) {
