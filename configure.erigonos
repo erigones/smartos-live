@@ -22,11 +22,11 @@ EOF
 fi
 
 PUBLISHER="erigones"
-RELEASE_VER="esdc_270"
+RELEASE_VER="esdc_300"
 SUNW_SPRO12_URL="https://download.joyent.com/pub/build/SunStudio.tar.bz2"
 ON_CLOSED_BINS_URL="https://download.joyent.com/pub/build/illumos/on-closed-bins.i386.tar.bz2"
 ON_CLOSED_BINS_ND_URL="https://download.joyent.com/pub/build/illumos/on-closed-bins-nd.i386.tar.bz2"
 GET_ILLUMOS="git clone https://github.com/erigones/illumos-joyent.git illumos"
-GET_ILLUMOS_EXTRA="git clone https://github.com/joyent/illumos-extra.git illumos-extra"
+GET_ILLUMOS_EXTRA="git clone https://github.com/erigones/illumos-extra.git illumos-extra"
 ILLUMOS_ADJUNCT_TARBALL_URL="https://download.joyent.com/pub/build/adjuncts/"
 OVERLAYS="erigonos generic"
