@@ -124,8 +124,9 @@ live: world manifest mancheck_conf boot sdcman $(TOOLS_TARGETS) $(MANCF_FILE)
 	@echo $(OVERLAY_MANIFESTS)
 	@echo $(SUBDIR_MANIFESTS)
 	mkdir -p ${ROOT}/log
-	./tools/build_live -m $(ROOT)/$(MANIFEST) -o $(ROOT)/output \
-	    $(OVERLAYS) $(ROOT)/proto $(ROOT)/man/man
+	ALTCTFCONVERT=$(ALTCTFCONVERT) ./tools/build_live \
+	    -m $(ROOT)/$(MANIFEST) -o $(ROOT)/output $(OVERLAYS) $(ROOT)/proto \
+	    $(ROOT)/man/man
 
 boot: $(BOOT_TARBALL)
 
@@ -206,7 +207,8 @@ $(MCPROTO)/illumos.mancheck.conf: projects/illumos/mancheck.conf | $(MCPROTO)
 $(BOOT_MPROTO)/illumos.manifest: projects/illumos/manifest | $(BOOT_MPROTO)
 	cp projects/illumos/boot.manifest $(BOOT_MPROTO)/illumos.manifest
 
-$(MPROTO)/illumos-extra.manifest: 1-extra-stamp | $(MPROTO)
+$(MPROTO)/illumos-extra.manifest: 1-extra-stamp \
+    projects/illumos-extra/manifest | $(MPROTO)
 	gmake DESTDIR=$(MPROTO) DESTNAME=illumos-extra.manifest \
 	    -C projects/illumos-extra manifest; \
 
