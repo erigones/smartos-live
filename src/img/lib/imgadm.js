@@ -20,7 +20,7 @@
  *
  * CDDL HEADER END
  *
- * Copyright (c) 2017, Joyent, Inc. All rights reserved.
+ * Copyright (c) 2018, Joyent, Inc. All rights reserved.
  *
  * * *
  * The main imgadm functionality. The CLI is a light wrapper around this tool.
@@ -85,6 +85,7 @@ var upgrade = require('./upgrade');
 
 var CONFIG_PATH = DB_DIR + '/imgadm.conf';
 var DEFAULT_CONFIG = {};
+var SET_REQUIREMENTS_BRAND_BRANDS = ['bhyve', 'lx', 'kvm'];
 
 /* BEGIN JSSTYLED */
 var VMADM_FS_NAME_RE = /^([a-zA-Z][a-zA-Z\._-]*)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(-disk\d+)?$/;
@@ -3310,6 +3311,7 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
     var maxOriginDepth = options.maxOriginDepth;
 
     var vmInfo;
+    var snapname = '@imgadm-create-pre-prepare';
     var sysinfo;
     var vmZfsFilesystemName;
     var vmZfsSnapnames;
@@ -3318,6 +3320,7 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
     var imageInfo = {};
     var finalSnapshot;
     var toCleanup = {};
+
     async.waterfall([
         function validateVm(next) {
             common.vmGet(vmUuid, {log: log}, function (err, vm) {
@@ -3337,7 +3340,7 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
         },
         function getVmInfo(next) {
             var opts;
-            if (vmInfo.brand === 'kvm' || vmInfo.Brand === 'bhyve') {
+            if (vmInfo.brand === 'kvm' || vmInfo.brand === 'bhyve') {
                 if (vmInfo.disks && vmInfo.disks[0]) {
                     var disk = vmInfo.disks[0];
                     vmZfsFilesystemName = disk.zfs_filesystem;
@@ -3476,6 +3479,30 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
                 log.debug({min_platform: m.requirements.min_platform},
                     'set smartos image min_platform to current');
             }
+            if (SET_REQUIREMENTS_BRAND_BRANDS.indexOf(vmInfo.brand) !== -1
+                && !(options.manifest.requirements
+                    && options.manifest.requirements.hasOwnProperty('brand')))
+            {
+                // Unless an explicit brand is provided (possibly empty)
+                // the brand for an image for one of these brands match the
+                // source VM since brand-specific changes may have been made
+                // and we can't guarantee it's compatible with other brands.
+                if (!m.requirements)
+                    m.requirements = {};
+                m.requirements.brand = vmInfo.brand;
+                log.debug({brand: m.requirements.brand},
+                    'set image requirements.brand to source VM brand');
+            }
+            if (vmInfo.brand === 'bhyve' && vmInfo.bootrom
+                && !(options.manifest.requirements
+                    && options.manifest.requirements.hasOwnProperty('bootrom')))
+            {
+                if (!m.requirements)
+                    m.requirements = {};
+                m.requirements.bootrom = vmInfo.bootrom;
+                log.debug({bootrom: m.requirements.bootrom},
+                    'set image requirements.bootrom to source VM bootrom');
+            }
             if (incremental) {
                 if (!originInfo) {
                     next(new errors.VmHasNoOriginError(vmUuid));
@@ -3545,6 +3572,37 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
                 next();
             }
         },
+        function removeBhyveQuota(next) {
+            if (vmInfo.brand !== 'bhyve') {
+                next();
+                return;
+            }
+
+            getZfsDataset(vmInfo.zfs_filesystem, ['quota'],
+                function onDataset(err, ds) {
+                    if (err) {
+                        next(err);
+                        return;
+                    }
+
+                    zfs.set(vmInfo.zfs_filesystem, {quota: 'none'},
+                        function quotaSet(e) {
+                            if (e) {
+                                next(e);
+                                return;
+                            }
+
+                            if (ds.quota === '0') {
+                                ds.quota = 'none';
+                            }
+
+                            toCleanup.bhyveQuota = ds.quota;
+                            next();
+                        }
+                    );
+                }
+            );
+        },
         function autoprepSnapshotDatasets(next) {
             if (!prepareScript) {
                 next();
@@ -3560,7 +3618,6 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
                 }
             }
 
-            var snapname = '@imgadm-create-pre-prepare';
             logCb(format('Snapshotting VM "%s" to %s', vmUuid, snapname));
             toCleanup.autoprepSnapshots = [];
             async.eachSeries(
@@ -4017,8 +4074,31 @@ IMGADM.prototype.createImage = function createImage(options, callback) {
                 async.eachSeries(
                     toCleanup.autoprepSnapshots,
                     function destroyOne(snap, nextSnapshot) {
+                        var re = new RegExp('/disk[0-9]*' + snapname + '$');
+
+                        if (vmInfo.brand === 'bhyve' && snap.match(re)) {
+                            // For bhyve brand, the disk snapshots will be gone
+                            // when the root snapshot is destroyed (because of
+                            // the -r) so, we only need to remove the root
+                            // snapshot here and skip diskX snapshots.
+                            self.log.debug({
+                                snapname: snap
+                            }, 'skipping deletion of bhyve disk snapshot');
+                            nextSnapshot();
+                            return;
+                        }
+
                         zfsDestroy(snap, self.log, nextSnapshot);
                     },
+                    next);
+            },
+            function cleanupBhyveQuota(next) {
+                if (!toCleanup.bhyveQuota) {
+                    next();
+                    return;
+                }
+
+                zfs.set(vmInfo.zfs_filesystem, {quota: toCleanup.bhyveQuota},
                     next);
             },
             function cleanupAutoprepStartVm(next) {
@@ -4069,9 +4149,16 @@ IMGADM.prototype.publishImage = function publishImage(opts, callback) {
         'options.manifestFile.files[0].compression');
     var self = this;
 
+    // Set x-request-id on all IMGAPI calls.
+    var headers = {};
+    if (self.log && self.log.fields && self.log.fields.req_id) {
+        headers['x-request-id'] = self.log.fields.req_id;
+    }
+
     var client = imgapi.createClient({
         agent: false,
         url: opts.url,
+        headers: headers,
         log: self.log.child({component: 'api', url: opts.url}, true),
         rejectUnauthorized: (process.env.IMGADM_INSECURE !== '1'),
         userAgent: self.userAgent

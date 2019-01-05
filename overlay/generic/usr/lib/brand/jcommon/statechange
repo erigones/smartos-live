@@ -168,6 +168,7 @@ setup_net()
 		allow_unfiltered_promisc=$(get_boolean_nic_property ${nic} \
 		    allow_unfiltered_promisc)
 		allowed_ips=$(eval echo \$_ZONECFG_net_${nic}_allowed_ips)
+		allowed_dhcp_cids=$(eval echo \$_ZONECFG_net_${nic}_allowed_dhcp_cids)
 		vrid=$(eval echo \$_ZONECFG_net_${nic}_vrrp_vrid)
 		vrrp_primary_ip=$(eval \
 		    echo \$_ZONECFG_net_${nic}_vrrp_primary_ip)
@@ -267,12 +268,18 @@ setup_net()
 			if ! dladm show-overlay $global_nic 2>/dev/null; then
 				dladm create-overlay $rule -v $num $global_nic
 				if [[ $? -ne 0 ]]; then
+				    # If creation fails, ALSO check
+				    # for existence again, in case
+				    # someone beat us to it.
+				    if ! dladm show-overlay $global_nic \
+					 2> /dev/null; then
 					logger -p daemon.err "zone $ZONENAME " \
 					    "failed to create overlay device " \
 					     "$global_nic with command " \
 					     "'dladm create-overlay $rule -v " \
 					     "$num $global_nic"
 					exit 1
+				    fi
 				fi
 			fi
 		fi
@@ -435,12 +442,20 @@ setup_net()
 			unset allowed_ip_map
 			typeset -A allowed_ip_map
 
+			dynamic_methods=""
+			separator=""
 			OLDIFS=$IFS
 			IFS=,
 
 			for zone_ip in $zone_ips; do
 				# For each static IP available, add it to the list.
-				if [[ $zone_ip != "dhcp" ]] && [[ $zone_ip != "addrconf" ]]; then
+				if [[ $zone_ip == "dhcp" ]]; then
+					dynamic_methods+="${separator}dhcpv4"
+					separator=","
+				elif [[ $zone_ip == "addrconf" ]]; then
+					dynamic_methods+="${separator}addrconf"
+					separator=","
+				else
 					clean_ip=`printf "%s" "${zone_ip}" | sed 's|^\([^/]*\)/.*|\1|'`
 					allowed_ip_map[${clean_ip}]=true
 				fi
@@ -471,9 +486,31 @@ setup_net()
 			if [[ -n ${allowed_ip_list} ]] &&
 			    ! dladm set-linkprop -t -z $ZONENAME \
 			    -p "allowed-ips=${allowed_ip_list}" ${nic}; then
-				log_and_exit
+				log_and_exit \
 				    "error setting VNIC allowed-ips $nic $allowed_ip_list"
 			fi
+
+			# Set the dynamic-methods property on the NIC
+			if [[ -n ${dynamic_methods} ]] &&
+			    ! dladm set-linkprop -t -z $ZONENAME \
+			    -p "dynamic-methods=${dynamic_methods}" ${nic}; then
+				log_and_exit \
+				    "error setting VNIC dynamic-methods $nic $dynamic_methods"
+			fi
+		fi
+
+		if [[ "$enable_dhcp" != "true" ]] && [[ -n "$allowed_dhcp_cids" ]] &&
+		    ! dladm set-linkprop -p "allowed-dhcp-cids=${allowed_dhcp_cids}" \
+		    -t -z $ZONENAME $nic; then
+			log_and_exit \
+			    "error setting VNIC allowed-dhcp-cids $nic $allowed_dhcp_cids"
+		fi
+
+		if [[ "$enable_dhcp" != "true" ]] && [[ -z "$allowed_dhcp_cids" ]] &&
+		    [[ "$zone_ips" == *dhcp* || "$zone_ips" == *addrconf* ]] &&
+		    ! dladm set-linkprop -p "allow-all-dhcp-cids=true" \
+		    -t -z $ZONENAME $nic; then
+			log_and_exit "error setting VNIC allow-all-dhcp-cids $nic"
 		fi
 
 		if [[ -n "$jst_ufpromisc" && ${allow_unfiltered_promisc} == "true" ]]; then
@@ -487,7 +524,7 @@ setup_net()
 				# br='block remote'.  Flow names should be < 31
 				# chars in length so that they get unique
 				# kstats.
-			 	# Use the VNIC mac addr. to generate a unique
+				# Use the VNIC mac addr. to generate a unique
 				# name.
 				mac_addr=`dladm show-vnic -z $ZONENAME -p \
 				    -o MACADDRESS $nic | tr ':' '_'`
@@ -794,27 +831,76 @@ cleanup_mount()
 	    id_gz_sockholder /var/run/.smartdc-amon.sock
 }
 
+function fix_forced_attrs {
+	typeset attr
+
+	for attr in ${!FORCED_ATTRS[@]}; do
+		typeset nval=${FORCED_ATTRS["$attr"]}
+		typeset -n envvar=_ZONECFG_attr_${attr//-/_}
+		typeset cval=$envvar
+
+		if [[ $cval == $nval ]]; then
+			# In most cases, $nval and $cval will be the same and
+			# nothing needs to be done. This includes the case where
+			# $nval and $cval are "".
+			continue
+		elif [[ -z $nval ]]; then
+			logger -p daemon.error "[zone $ZONENAME]" \
+			    "Illegal value for attr '$attr': '$cval'." \
+			    "Removing attr '$attr'"
+			zonecfg -z "$ZONENAME" "remove -F attr name=$attr"
+
+			unset ${!envvar}
+		else
+			logger -p daemon.error "[zone $ZONENAME]" \
+			    "Illegal value for attr '$attr': '$cval'." \
+			    "Setting to '$nval'"
+			zonecfg -z "$ZONENAME" "remove -F attr name=$attr;" \
+			    "add attr; set type=string;" \
+			    "set name=$attr; set value=\"$nval\"; end;"
+
+			export ${!envvar}="$nval"
+		fi
+	done
+}
+
 #
 # Main
 #
 
-[[ "$subcommand" == "pre" && $cmd == 0 ]] && setup_fs
-if [[ "$subcommand" == "post" && $cmd == 0 ]]; then
-	[[ -n "$jst_showsnap" ]] && setup_snapshots
-	setup_net
-	setup_fw
-fi
-
-# We can't set a rctl until we have a process in the zone to grab
-[[ "$subcommand" == "post" && $cmd == 1 ]] && setup_cpu_baseline
-
-# Zone halt is hung unmounting, try to recover
-[[ "$subcommand" == "post" && $state == 6 && $cmd == 8 ]] && \
-    cleanup_mount "$6"
-
-if [[ "$subcommand" == "pre" && $cmd == 4 ]]; then
-	[[ -n "$jst_snowsnap" ]] && cleanup_snapshots
-	cleanup_net
-fi
+case $subcommand in
+pre)
+	case $cmd in
+	0)	# pre-ready
+		fix_forced_attrs
+		setup_fs
+		;;
+	4)	# pre-halt
+		[[ -n "$jst_showsnap" ]] && cleanup_snapshots
+		cleanup_net
+		;;
+	esac
+	;;
+post)
+	case $cmd in
+	0)	# post-ready
+		[[ -n "$jst_showsnap" ]] && setup_snapshots
+		setup_net
+		setup_fw
+		;;
+	1)	# post-boot
+		# We can't set a rctl until we have a process in the zone to
+		# grab
+		setup_cpu_baseline
+		;;
+	8)	# post-unmount
+		# Zone halt is hung unmounting, try to recover
+		if [[ $state == 6 ]]; then
+			cleanup_mount "$6"
+		fi
+		;;
+	esac
+	;;
+esac
 
 exit 0

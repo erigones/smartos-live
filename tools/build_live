@@ -178,6 +178,19 @@ function bi_run_tzcheck
 	bi_emit_done
 }
 
+function bi_run_ucodecheck
+{
+	local ucodecheck="$bi_wsroot/tools/ucodecheck/ucodecheck"
+
+	bi_emit_start 'Checking microcode files...'
+
+	if ! "$ucodecheck" -f "$bi_manifest" -p "$bi_wsroot/proto"; then
+		fail "not ucodecheck clean"
+	fi
+
+	bi_emit_done
+}
+
 #
 # Create a blank ramdisk image file, then attach it as a lofi device.
 #
@@ -872,6 +885,7 @@ bi_log_setup "$bi_wsroot/log/build_live.$bi_buildstamp.$(date +%s).log"
 #
 bi_run_mancheck
 bi_run_tzcheck
+bi_run_ucodecheck
 
 bi_setup_work_dir
 

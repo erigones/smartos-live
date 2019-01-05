@@ -1,13 +1,42 @@
-// Copyright 2015 Joyent, Inc.  All rights reserved.
-//
-// NOTE: we use 169.254.169.x as *non-Private* here because it's not in the
-// designated private ranges we're concerned with. It may cause problems in
-// which case it can be changed to some other non-Private address.
+/*
+ * CDDL HEADER START
+ *
+ * The contents of this file are subject to the terms of the
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at http://smartos.org/CDDL
+ *
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file.
+ *
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
+ *
+ * Copyright (c) 2018, Joyent, Inc.
+ *
+ */
 
-var async = require('/usr/node/node_modules/async');
+/*
+ * NOTE: we use 169.254.169.x as *non-Private* here because it's not in the
+ * designated private ranges we're concerned with. It may cause problems in
+ * which case it can be changed to some other non-Private address.
+ */
+
+var assert = require('/usr/node/node_modules/assert-plus');
+var common = require('./common');
 var execFile = require('child_process').execFile;
+var f = require('util').format;
 var fs = require('fs');
 var VM = require('/usr/vm/node_modules/VM');
+var vasync = require('/usr/vm/node_modules/vasync');
 var vmtest = require('../common/vmtest.js');
 
 // this puts test stuff in global, so we need to tell jsl about that:
@@ -223,6 +252,35 @@ var simple_properties = [
     ['package_name', 'really expensive package'],
     ['package_version', 'XP']
 ];
+
+/*
+ * An array of properties that cannot be changed (but are still validated).  In
+ * each array item is another array, and inside that the first item is the
+ * property name, and the second item is a bogus property value that will pass
+ * validation.
+ */
+var UNMODIFIABLE_PROPS = [
+    ['brand', 'bogus-brand'],
+    ['hvm', 'bogus-hvm'],
+    ['last_modified', 'bogus-last-modified'],
+    ['server_uuid', '00000000-0000-0000-0000-000000000000'],
+    ['uuid', '00000000-0000-0000-0000-000000000000'],
+    ['zonename', 'bogus-zonename']
+];
+
+/*
+ * Items that are set using zonecfg with an array of bogus (but valid) property
+ * values.
+ */
+var ZONECFG_PROPS = {
+    cpu_shares: [undefined, 5, undefined],
+    limit_priv: ['', 'default', 'default,dtrace_user', ''],
+    max_lwps: [undefined, 5000, undefined],
+    max_msg_ids: [undefined, 5000, undefined],
+    max_shm_ids: [undefined, 5000, undefined],
+    max_shm_memory: [undefined, 5000, undefined],
+    zfs_io_priority: [undefined, 50, undefined]
+};
 
 test('create VM', function (t) {
     VM.create(PAYLOADS.create, function (err, vmobj) {
@@ -675,8 +733,9 @@ test('add NIC with minimal properties', function (t) {
 });
 
 test('set then unset simple properties', function (t) {
-    async.forEachSeries(simple_properties,
-        function (item, cb) {
+    vasync.forEachPipeline({
+        inputs: simple_properties,
+        func: function (item, cb) {
             var prop = item[0];
             var value = item[1];
             var payload = {};
@@ -723,11 +782,10 @@ test('set then unset simple properties', function (t) {
                     });
                 }
             });
-        },
-        function (err) {
-            t.end();
         }
-    );
+    }, function (err) {
+        t.end();
+    });
 });
 
 test('update quota', function (t) {
@@ -1062,67 +1120,77 @@ test('update max_locked_memory', function (t) {
     });
 });
 
-function zonecfg(args, callback)
-{
-    var cmd = '/usr/sbin/zonecfg';
-
-    execFile(cmd, args, function (error, stdout, stderr) {
-        if (error) {
-            callback(error, {stdout: stdout, stderr: stderr});
-        } else {
-            callback(null, {stdout: stdout, stderr: stderr});
+test('update resolvers when empty', function (t) {
+    var payload = {
+        resolvers: ['4.2.2.1', '4.2.2.2']
+    };
+    VM.update(vm_uuid, payload, function (up_err) {
+        if (up_err) {
+            t.ok(false, 'updating resolvers: ' + up_err.message);
+            t.end();
+            return;
         }
-    });
-}
 
-test('update resolvers when no resolvers', function (t) {
-
-    zonecfg([
-        '-z', vm_uuid,
-        'remove attr name=resolvers;'
-    ], function (err, fds) {
-        VM.update(vm_uuid, {resolvers: ['4.2.2.1', '4.2.2.2']},
-            function (up_err) {
-                t.ok(!up_err, 'no error adding resolvers: '
-                    + (up_err ? up_err.message : 'ok'));
-                t.end();
-            }
-        );
-    });
-});
-
-test('update resolvers to empty when already empty', function (t) {
-    zonecfg(['-z', vm_uuid, 'remove attr name=resolvers;'],
-        function (err, fds) {
-
-        VM.load(vm_uuid, function (l_err, before_obj) {
-            if (l_err) {
-                t.ok(false, 'loading VM: ' + l_err.message);
+        VM.load(vm_uuid, function (load_err, vmobj) {
+            if (load_err) {
+                t.ok(false, 'loading VM (after): ' + load_err.message);
                 t.end();
                 return;
             }
 
-            t.deepEqual(before_obj.resolvers, [], 'initial state has no '
-                + 'resolvers: ' + JSON.stringify(before_obj.resolvers));
-            VM.update(vm_uuid, {'resolvers': []}, function (up_err) {
-                if (up_err) {
-                    t.ok(false, 'updating resolvers: ' + up_err.message);
-                    t.end();
-                    return;
-                }
+            t.deepEqual(vmobj.resolvers, payload.resolvers,
+                'resolvers after update: ' + JSON.stringify(vmobj.resolvers));
+            t.end();
+        });
+    });
+});
 
-                VM.load(vm_uuid, function (error, after_obj) {
-                    if (error) {
-                        t.ok(false, 'loading VM (after): ' + error.message);
-                        t.end();
-                        return;
-                    }
+test('update resolvers to empty when filled', function (t) {
+    var payload = {
+        resolvers: []
+    };
+    VM.update(vm_uuid, payload, function (up_err) {
+        if (up_err) {
+            t.ok(false, 'updating resolvers: ' + up_err.message);
+            t.end();
+            return;
+        }
 
-                    t.deepEqual(after_obj.resolvers, [], 'no resolvers after '
-                        + 'update: ' + JSON.stringify(after_obj.resolvers));
-                    t.end();
-                });
-            });
+        VM.load(vm_uuid, function (load_err, vmobj) {
+            if (load_err) {
+                t.ok(false, 'loading VM (after): ' + load_err.message);
+                t.end();
+                return;
+            }
+
+            t.deepEqual(vmobj.resolvers, payload.resolvers,
+                'resolvers after update: ' + JSON.stringify(vmobj.resolvers));
+            t.end();
+        });
+    });
+});
+
+test('update resolvers to empty when empty', function (t) {
+    var payload = {
+        resolvers: []
+    };
+    VM.update(vm_uuid, payload, function (up_err) {
+        if (up_err) {
+            t.ok(false, 'updating resolvers: ' + up_err.message);
+            t.end();
+            return;
+        }
+
+        VM.load(vm_uuid, function (load_err, vmobj) {
+            if (load_err) {
+                t.ok(false, 'loading VM (after): ' + load_err.message);
+                t.end();
+                return;
+            }
+
+            t.deepEqual(vmobj.resolvers, payload.resolvers,
+                'resolvers after update: ' + JSON.stringify(vmobj.resolvers));
+            t.end();
         });
     });
 });
@@ -1278,6 +1346,112 @@ test('get vmobj for full VM after modifications', function (t) {
             });
         }
 
+        t.end();
+    });
+});
+
+/*
+ * Attempt to update the unmodifiable properties to a generic value.
+ *
+ * These properties should be silently ignored and return success even though
+ * nothing was modified.  This is useful in situations such as reprovisioning,
+ * or updating from an old VM where all the properties from `vmadm get` would be
+ * present.  This test ensures that `VM.update` silently ignores any keys that
+ * cannot be changed.
+ */
+test('attempt to modify unmodifiable properties', function (t) {
+    VM.load(vm_uuid, function (loadErr, vmobj) {
+        common.ifError(t, loadErr, 'load VM');
+
+        if (loadErr) {
+            t.end();
+            return;
+        }
+
+        vasync.forEachPipeline({
+            inputs: UNMODIFIABLE_PROPS,
+            func: function (item, cb) {
+                var prop = item[0];
+                var value = item[1];
+
+                var payload = {};
+                payload[prop] = value;
+
+                /*
+                 * Update the property (should be a success but nothing should
+                 * change).
+                 */
+                VM.update(vm_uuid, payload, function (updateErr) {
+                    common.ifError(t, updateErr,
+                        f('update unmodifiable VM property "%s" to %j',
+                        prop, value));
+
+                    if (updateErr) {
+                        cb(updateErr);
+                        return;
+                    }
+
+                    /*
+                     * Ensure the property hasn't changed.  The exception here
+                     * is the "last_modified" property that will get updated
+                     * under a variety of conditions.  We just skip looking it
+                     * up here and move on.
+                     */
+                    if (prop === 'last_modified') {
+                        cb();
+                        return;
+                    }
+
+                    VM.load(vm_uuid, function (loadErr2, obj) {
+                        common.ifError(t, loadErr2, 'load VM');
+
+                        if (loadErr2) {
+                            cb(loadErr2);
+                            return;
+                        }
+
+                        t.equal(obj[prop], vmobj[prop],
+                            f('value has not been modified '
+                            + '(original: %j, found %j)',
+                            vmobj[prop], obj[prop]));
+
+                        cb();
+                    });
+                });
+            }
+        }, function (err) {
+            common.ifError(t, err, 'unmodifiable properties');
+            t.end();
+        });
+    });
+});
+
+/*
+ * Attempt to remove and set properties that are stored in zonecfg.
+ */
+test('attempt to remove and set zonecfg properties', function (t) {
+    vasync.forEachPipeline({
+        inputs: Object.keys(ZONECFG_PROPS),
+        func: function (prop, cb) {
+            var values = ZONECFG_PROPS[prop];
+
+            vasync.forEachPipeline({
+                inputs: values,
+                func: function (value, cb2) {
+                    var payload = {};
+                    payload[prop] = value;
+
+                    VM.update(vm_uuid, payload, function (err) {
+                        common.ifError(t, err, f('update VM property %j to %j',
+                            prop, value));
+
+                        cb2(err);
+                    });
+                }
+            }, cb);
+        }
+    }, function (err) {
+        common.ifError(t, err, 'zonecfg properties');
         t.end();
     });
 });

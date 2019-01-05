@@ -36,6 +36,7 @@ f etc/opasswd 0644 root sys
 f etc/ouser_attr 0644 root sys
 f etc/passwd 0644 root sys
 f etc/path_to_inst 0444 root root
+f etc/ppt_matches 0444 root root
 f etc/profile 0644 root sys
 f etc/resolv.conf 0644 netadm netadm
 f etc/rtc_config 0644 root root
@@ -176,6 +177,7 @@ f usr/sbin/zonememstat 0555 root bin
 f usr/sbin/zonemon 0555 root bin
 d usr/share/bhyve 0555 root bin
 f usr/share/bhyve/uefi-csm-rom.bin 0444 root bin
+f usr/share/bhyve/uefi-rom.bin 0444 root bin
 f usr/share/man/man1/json.1 0444 root bin
 f usr/share/man/man1m/fssstat.1m 0444 root bin
 d var/db 0755 root sys

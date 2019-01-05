@@ -10,7 +10,7 @@
 #
 
 #
-# Copyright (c) 2017, Joyent, Inc.
+# Copyright (c) 2018, Joyent, Inc.
 #
 
 include Makefile.defs
@@ -63,11 +63,11 @@ SMARTDCLIBDIR =	$(DESTDIR)/smartdc/lib
 #
 bootparams :	LIBS +=		-ldevinfo
 bootparams :	WARN_FLAGS +=	-Wno-unused
+fswatcher :	LIBS +=		-lthread -lnvpair -lavl
 zfs_recv :	LIBS +=		-lsocket
 zfs_send :	LIBS +=		-lsocket
 vmbundle :	CPPFLAGS +=	-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
 sdc-on-tty :	CFLAGS +=	$(OPT_FLAG)
-zoneevent :	LIBS +=		-lnvpair -lsysevent
 sysevent :	LIBS +=		-lnvpair -lsysevent
 sysinfo_mod.so : CPPFLAGS +=	-D_REENTRANT
 sysinfo_mod.so : CFLAGS +=	-fpic -Wno-unused-parameter
@@ -81,8 +81,10 @@ JS_CHECK_TARGETS=\
 	node_modules/{system,onlyif,net-boot-config}.js \
 	net-boot-config \
 	vm/sbin/*.js \
+	vm/node_modules/diff.js \
 	vm/node_modules/dladm.js \
 	vm/node_modules/expander.js \
+	vm/node_modules/fswatcher.js \
 	vm/node_modules/hrtime.js \
 	vm/node_modules/ip.js \
 	vm/node_modules/nic.js \
@@ -90,31 +92,48 @@ JS_CHECK_TARGETS=\
 	vm/node_modules/utils.js \
 	vm/node_modules/VM.js \
 	vm/node_modules/qmp.js \
+	vm/node_modules/queue.js \
 	vm/node_modules/openonerrlogger.js \
 	vm/node_modules/vmload/*.js \
+	vm/node_modules/vminfod/*.js \
 	vm/node_modules/sysevent-stream.js \
 	vm/node_modules/zonecfg.js \
+	vm/node_modules/zoneevent.js \
 	img/lib/*.js \
 	img/sbin/imgadm \
 	vm/common/nictag.js \
+	vm/tests/common.js \
 	vm/tests/test-alias.js \
+	vm/tests/test-bhyve-disk-resize.js \
+	vm/tests/test-bhyve-pci.js \
+	vm/tests/test-bhyve-pci_slot.js \
 	vm/tests/test-cleanup-on-failure.js \
-	vm/tests/test-create.js \
 	vm/tests/test-create-filesystems.js \
-	vm/tests/test-docker.js \
+	vm/tests/test-create.js \
 	vm/tests/test-defaults.js \
+	vm/tests/test-docker.js \
+	vm/tests/test-firewall.js \
+	vm/tests/test-fswatcher.js \
 	vm/tests/test-hrtime.js \
 	vm/tests/test-indestructible.js \
 	vm/tests/test-internal_metadata_namespaces.js \
 	vm/tests/test-lastexited.js \
 	vm/tests/test-openonerrlogger.js \
+	vm/tests/test-queue.js \
+	vm/tests/test-quota.js \
 	vm/tests/test-reboot.js \
 	vm/tests/test-reprovision.js \
+	vm/tests/test-send-recv.js \
 	vm/tests/test-snapshots.js \
 	vm/tests/test-spoof-opts.js \
+	vm/tests/test-sysinfo.js \
 	vm/tests/test-tmpfs.js \
 	vm/tests/test-update.js \
 	vm/tests/test-vrrp-nics.js \
+	vm/tests/test-vminfod.js \
+	vm/tests/test-vminfod-zonewatcher.js \
+	vm/tests/test-vminfod-zonewatcher-overflow.js \
+	vm/tests/test-vminfod-zpoolwatcher.js \
 	vm/lib/metadata/*.js
 
 JS_CHECK_OLDSKOOL_TARGETS = \
@@ -128,6 +147,7 @@ C_CHECK_TARGETS=\
 	bootparams.c \
 	cryptpass.c \
 	disk_size.c \
+	fswatcher.c \
 	measure_terminal.c \
 	nomknod.c \
 	qemu-exec.c \
@@ -135,7 +155,6 @@ C_CHECK_TARGETS=\
 	vmunbundle.c \
 	zfs_recv.c \
 	zfs_send.c \
-	zoneevent.c \
 	sdc-on-tty.c \
 	sysinfo_mod.c \
 	sysevent.c \
@@ -280,12 +299,12 @@ TARGETS = \
 	disklayout \
 	disklist \
 	disk_size \
+	fswatcher \
 	mkzpool \
 	removable_disk \
 	vmunbundle \
 	zfs_recv \
 	zfs_send \
-	zoneevent \
 	sysevent \
 	sysinfo_mod.so \
 	nomknod.so.32 \
@@ -326,12 +345,11 @@ clean : TARGET = clean
 install : TARGET = install
 check : TARGET = lint
 
-$(SUBDIRS): FRC
-	@cd $@; pwd; $(MAKE) $(SUBDIRS_ENV) $(TARGET)
-
-
 all: $(TARGETS) $(USR_LIB_TARGETS) sysinfo nictagadm sysevent \
 	$(SMARTDC_TARGETS) $(SMARTDC_LIB_TARGETS) $(SUBDIRS)
+
+$(SUBDIRS): FRC
+	@cd $@; pwd; $(MAKE) $(SUBDIRS_ENV) $(TARGET)
 
 install: all $(SUBDIRS)
 	mkdir -p $(DESTDIR)/usr/bin
@@ -367,9 +385,10 @@ install: all $(SUBDIRS)
 	sed -e "s|var expat.*;|var expat = require('./expat_binding');|" \
 	    < node-expat/lib/node-expat.js \
 	    > $(PREFIX_NODE)/node_modules/node-expat.js
+	cp fswatcher $(DESTDIR)/usr/vm/sbin/fswatcher
 	cp dockerinit/build/dockerinit $(DESTDIR)/usr/vm/sbin/dockerinit
 	cp dockerinit/build/dockerexec $(DESTDIR)/usr/vm/sbin/dockerexec
-	cp zoneevent $(DESTDIR)/usr/vm/sbin/zoneevent
+	cp zoneevent.js $(DESTDIR)/usr/vm/sbin/zoneevent
 	cp zfs_send $(DESTDIR)/usr/vm/sbin/zfs_send
 	cp zfs_recv $(DESTDIR)/usr/vm/sbin/zfs_recv
 	cp vmunbundle $(DESTDIR)/usr/vm/sbin/vmunbundle
@@ -379,8 +398,12 @@ install: all $(SUBDIRS)
 	    $(DESTDIR)/lib/svc/manifest/system/system-vmadmd.xml
 	cp vm/smf/system-metadata.xml \
 	    $(DESTDIR)/lib/svc/manifest/system/system-metadata.xml
+	cp vm/smf/system-vminfod.xml \
+	    $(DESTDIR)/lib/svc/manifest/system/system-vminfod.xml
 	mv $(DESTDIR)/usr/vm/sbin/vmadmd.js $(DESTDIR)/usr/vm/sbin/vmadmd
 	mv $(DESTDIR)/usr/vm/sbin/vmadm.js $(DESTDIR)/usr/vm/sbin/vmadm
+	mv $(DESTDIR)/usr/vm/sbin/vminfo.js $(DESTDIR)/usr/vm/sbin/vminfo
+	mv $(DESTDIR)/usr/vm/sbin/vminfod.js $(DESTDIR)/usr/vm/sbin/vminfod
 	mv $(DESTDIR)/usr/vm/sbin/add-userscript.js \
 	    $(DESTDIR)/usr/vm/sbin/add-userscript
 	mv $(DESTDIR)/usr/vm/sbin/metadata.js $(DESTDIR)/usr/vm/sbin/metadata
@@ -464,23 +487,22 @@ check: $(JSLINT) $(SUBDIRS)
 
 .PHONY: manifest
 manifest:
-	(cat manifest && cd vm && \
-	    echo "# list of tests is autogenerated by smartos-live/src/Makefile" && \
-	    (find tests/ -type f -exec echo "{}" "0444 root bin" \; | grep -v "/testdata/")) \
-	    | sed -e "s|^tests/|f usr/vm/test/tests/|" \
-	    > $(DESTDIR)/$(DESTNAME)
-	(cd vm/tests && \
-	    find testdata/ -type f -exec echo "{}" "0444 root bin" \;) \
-	    | sed -e "s|^testdata/|f usr/vm/test/testdata/|" \
-	    >> $(DESTDIR)/$(DESTNAME)
-	(cd fw/test && \
-	    find integration/ -type f -exec echo "{}" "0444 root bin" \;) \
-	    | sed -e "s|^integration/|f usr/fw/test/integration/|" \
-	    >> $(DESTDIR)/$(DESTNAME)
-	(cd fw/etc && \
-	    find examples/ -type f -exec echo "{}" "0444 root bin" \;) \
-	    | sed -e "s|^examples/|f usr/fw/etc/examples/|" \
-	    >> $(DESTDIR)/$(DESTNAME)
+	cp manifest ./$(DESTNAME).tmp
+	echo "# list of tests is autogenerated by smartos-live/src/Makefile" \
+	    >> ./$(DESTNAME).tmp
+	(cd vm && git ls-files tests) | grep -v /testdata/ \
+	    | sed -e 's|^|f usr/vm/test/|' -e 's|$$| 0444 root bin|' \
+	    >> ./$(DESTNAME).tmp
+	(cd vm/tests && git ls-files testdata) \
+	    | sed -e 's|^|f usr/vm/test/|' -e 's|$$| 0444 root bin|' \
+	    >> ./$(DESTNAME).tmp
+	(cd fw/test && git ls-files integration) \
+	    | sed -e 's|^|f usr/fw/test/|' -e 's|$$| 0444 root bin|' \
+	    >> ./$(DESTNAME).tmp
+	(cd fw/etc && git ls-files examples) \
+	    | sed -e 's|^|f usr/fw/etc/|' -e 's|$$| 0444 root bin|' \
+	    >> ./$(DESTNAME).tmp
+	mv ./$(DESTNAME).tmp $(DESTDIR)/$(DESTNAME)
 
 .PHONY: mancheck_conf
 mancheck_conf:

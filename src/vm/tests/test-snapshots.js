@@ -20,10 +20,11 @@
  *
  * CDDL HEADER END
  *
- * Copyright (c) 2017, Joyent, Inc.
+ * Copyright (c) 2018, Joyent, Inc.
  *
  */
 
+var common = require('./common');
 var cp = require('child_process');
 var execFile = cp.execFile;
 var fs = require('fs');
@@ -32,6 +33,7 @@ var path = require('path');
 var VM = require('/usr/vm/node_modules/VM');
 var vasync = require('/usr/vm/node_modules/vasync');
 var vmtest = require('../common/vmtest.js');
+var vminfod = require('/usr/vm/node_modules/vminfod/client');
 
 // this puts test stuff in global, so we need to tell jsl about that:
 /* jsl:import ../node_modules/nodeunit-plus/index.js */
@@ -84,8 +86,8 @@ test('create joyent-minimal VM with delegated dataset', function (t) {
         } else {
             t.ok(true, 'VM created with uuid ' + obj.uuid);
             VM.load(obj.uuid, function (e, o) {
-                t.ok(!err, 'loading VM after create');
-                if (!err) {
+                common.ifError(t, e, 'loading VM after create');
+                if (!e) {
                     t.ok(o.snapshots.length === 0, 'no snapshots after create');
                     t.ok(o.hasOwnProperty('zfs_filesystem'),
                         'has zfs_filesystem');
@@ -167,8 +169,8 @@ test('create KVM VM', function (t) {
         } else {
             t.ok(true, 'VM created with uuid ' + obj.uuid);
             VM.load(obj.uuid, function (e, o) {
-                t.ok(!err, 'loading VM after create');
-                if (!err) {
+                common.ifError(t, e, 'loading VM after create');
+                if (!e) {
                     t.ok(o.snapshots.length === 0, 'VM has no snapshots');
                     vmobj = o;
                 } else {
@@ -240,7 +242,6 @@ test('delete KVM VM', function (t) {
 //    create 100 snapshots
 //    delete 100 snapshots
 
-
 test('create joyent-minimal VM w/o delegated', function (t) {
     var payload = {
         alias: 'test-snapshots-' + process.pid,
@@ -257,8 +258,8 @@ test('create joyent-minimal VM w/o delegated', function (t) {
         } else {
             t.ok(true, 'VM created with uuid ' + obj.uuid);
             VM.load(obj.uuid, function (e, o) {
-                t.ok(!err, 'loading VM after create');
-                if (!err) {
+                common.ifError(t, e, 'loading VM after create');
+                if (!e) {
                     t.ok(o.snapshots.length === 0, 'no snapshots after create');
                     t.ok(o.hasOwnProperty('zfs_filesystem'),
                         'has zfs_filesystem');
@@ -278,13 +279,11 @@ function (t) {
     var snapshot = dataset + '@manual-snapshot';
 
     execFile('/usr/sbin/zfs', ['snapshot', snapshot], function (error) {
-        t.ok(!error, 'created manual snapshot'
-            + (error ? ': ' + error.message : ''));
+        common.ifError(t, error, 'created manual snapshot');
         if (!error) {
             execFile('/usr/sbin/zfs',
                 ['list', '-t', 'snapshot', snapshot], function (err) {
-                t.ok(!err, 'manual snapshot exists'
-                    + (err ? ': ' + err.message : ''));
+                common.ifError(t, err, 'manual snapshot exists');
                 if (!err) {
                     VM.load(vmobj.uuid, function (e, o) {
                         t.ok(!e, 'reload VM after snap'
@@ -352,7 +351,8 @@ test('create snapshot with bad name', function (t) {
         inputs: bad_names,
         func: caller
     }, function (err) {
-        t.ok(!err, 'no extra errors from creating all the bad snapshots');
+        common.ifError(t, err,
+            'no extra errors from creating all the bad snapshots');
         t.end();
     });
 });
@@ -370,14 +370,14 @@ test('write file to joyent-minimal zoneroot then snapshot1', function (t) {
     filename = path.join(vmobj.zonepath, 'root', '/root/hello.txt');
 
     fs.writeFile(filename, MAGIC_STRING1, function (err) {
-        t.ok(!err, 'no error writing file to zoneroot');
+        common.ifError(t, err, 'writing file to zoneroot');
         if (err) {
             abort = true;
             t.end();
         } else {
             VM.create_snapshot(vmobj.uuid, 'snapshot1', {}, function (snaperr) {
-                t.ok(!snaperr, 'no error creating snapshot of ' + vmobj.uuid
-                    + (snaperr ? ' ' + snaperr.message : ''));
+                common.ifError(t, snaperr, 'creating snapshot of '
+                    + vmobj.uuid);
                 VM.load(vmobj.uuid, function (e, o) {
                     t.ok(!e, 'loading VM after create');
                     if (!e) {
@@ -408,14 +408,13 @@ function (t) {
     filename = path.join(vmobj.zonepath, 'root', '/root/hello.txt');
 
     fs.writeFile(filename, MAGIC_STRING2, function (err) {
-        t.ok(!err, 'no error writing file to zoneroot'
-            + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'writing file to zoneroot');
         if (err) {
             abort = true;
             t.end();
         } else {
             VM.create_snapshot(vmobj.uuid, 'snapshot2', {}, function (snaperr) {
-                t.ok(!snaperr, 'no error creating snapshot of ' + vmobj.uuid);
+                t.ok(!snaperr, 'creating snapshot of ' + vmobj.uuid);
                 VM.load(vmobj.uuid, function (e, o) {
                     t.ok(!e, 'loading VM after create');
                     if (!e) {
@@ -463,14 +462,13 @@ function (t) {
     filename = path.join(vmobj.zonepath, 'root', '/root/hello.txt');
 
     fs.writeFile(filename, MAGIC_STRING3, function (err) {
-        t.ok(!err, 'no error writing file to zoneroot'
-            + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'writing file to zoneroot');
         if (err) {
             abort = true;
             t.end();
         } else {
             VM.create_snapshot(vmobj.uuid, 'snapshot3', {}, function (snaperr) {
-                t.ok(!snaperr, 'no error creating snapshot of ' + vmobj.uuid);
+                t.ok(!snaperr, 'creating snapshot of ' + vmobj.uuid);
                 VM.load(vmobj.uuid, function (e, o) {
                     t.ok(!e, 'loading VM after create');
                     if (!e) {
@@ -502,11 +500,10 @@ test('rollback joyent-minimal to snapshot2 and test data', function (t) {
     var filename = path.join(vmobj.zonepath, 'root', '/root/hello.txt');
 
     VM.rollback_snapshot(vmobj.uuid, 'snapshot2', {}, function (err) {
-        t.ok(!err, 'no error rolling back snapshot2 of '
-            + vmobj.uuid + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'rolling back snapshot2 of ' + vmobj.uuid);
 
         fs.readFile(filename, function (error, data) {
-            t.ok(!error, 'no error reading file from ' + filename);
+            common.ifError(t, error, 'reading file from ' + filename);
             if (error) {
                 abort = true;
                 t.end();
@@ -545,11 +542,11 @@ test('rollback joyent-minimal to snapshot1 and test data', function (t) {
     var filename = path.join(vmobj.zonepath, 'root', '/root/hello.txt');
 
     VM.rollback_snapshot(vmobj.uuid, 'snapshot1', {}, function (err) {
-        t.ok(!err, 'no error rolling back snapshot1 of ' + vmobj.uuid
-            + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'rolling back snapshot1 of '
+            + vmobj.uuid);
 
         fs.readFile(filename, function (error, data) {
-            t.ok(!error, 'no error reading file from ' + filename);
+            common.ifError(t, error, 'reading file from ' + filename);
             if (error) {
                 abort = true;
                 t.end();
@@ -585,8 +582,7 @@ test('delete snapshot1 from joyent-minimal', function (t) {
     }
 
     deleteSnapshot(t, vmobj.uuid, 'snapshot1', 0, function (err) {
-        t.ok(!err, 'no error deleting snapshot1 of ' + vmobj.uuid
-            + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'deleting snapshot1 of ' + vmobj.uuid);
         if (err) {
             abort = true;
         }
@@ -603,7 +599,7 @@ function (t) {
     }
 
     VM.create_snapshot(vmobj.uuid, '20130131180505', {}, function (err) {
-        t.ok(!err, 'no error creating 20130131180505 snapshot of '
+        common.ifError(t, err, 'creating 20130131180505 snapshot of '
             + vmobj.uuid);
         VM.load(vmobj.uuid, function (e, o) {
             t.ok(!e, 'loading VM after create');
@@ -616,8 +612,8 @@ function (t) {
                 '20130131180505 after create');
             deleteSnapshot(t, vmobj.uuid, '20130131180505', 0,
                 function (delerr) {
-                    t.ok(!delerr, 'no error deleting 20130131180505 of '
-                        + vmobj.uuid + (delerr ? ' ' + delerr.message : ''));
+                    common.ifError(t, delerr, 'deleting 20130131180505 of '
+                        + vmobj.uuid);
                     if (err) {
                         abort = true;
                     }
@@ -636,8 +632,8 @@ function createSnapshot(t, uuid, snapname, expected_count, cb) {
     }
 
     VM.create_snapshot(vmobj.uuid, snapname, {}, function (err) {
-        t.ok(!err, 'no error creating snapshot ' + snapname + ' of '
-            + vmobj.uuid + (err ? ': ' + err.message : ''));
+        common.ifError(t, err, 'creating snapshot ' + snapname + ' of '
+            + vmobj.uuid);
         VM.load(vmobj.uuid, function (e, o) {
             t.ok(!e, 'loading VM after create');
             if (!e) {
@@ -659,8 +655,7 @@ function deleteSnapshot(t, uuid, snapname, expected_remaining, cb) {
     }
 
     VM.delete_snapshot(vmobj.uuid, snapname, {}, function (err) {
-        t.ok(!err, 'no error deleting ' + snapname + ' of '
-            + vmobj.uuid + (err ? ' ' + err.message : ''));
+        common.ifError(t, err, 'deleting ' + snapname + ' of ' + vmobj.uuid);
         VM.load(vmobj.uuid, function (e, o) {
             t.ok(!e, 'loading VM after delete of ' + snapname);
             if (e) {
@@ -696,8 +691,8 @@ function createXSnapshots(t, x, callback)
         createSnapshot(t, vmobj.uuid, snapname, (creates + 1),
             function (create_err) {
                 if (create_err) {
-                    t.ok(!create_err, 'no errors creating snapshot "' + snapname
-                        + '" ' + (create_err ? ' ' + create_err.message : ''));
+                    common.ifError(t, create_err,
+                        'creating snapshot "' + snapname + '"');
                 }
                 creates++;
                 cb(create_err);
@@ -705,8 +700,7 @@ function createXSnapshots(t, x, callback)
         );
     },
     function (err) {
-        t.ok(!err, 'no errors creating ' + x + ' snapshots'
-            + (err ? ': ' + err.message : ''));
+        common.ifError(t, err, 'creating ' + x + ' snapshots');
         if (err) {
             abort = true;
         }
@@ -740,16 +734,15 @@ test('delete 50 snapshots on joyent-minimal', function (t) {
         snapname = 'snapshot' + deletes;
         deleteSnapshot(t, vmobj.uuid, snapname, deletes, function (delete_err) {
             if (delete_err) {
-                t.ok(!delete_err, 'no errors deleting snapshot "' + snapname
-                    + '" ' + (delete_err ? ' ' + delete_err.message : ''));
+                common.ifError(t, delete_err, 'deleting snapshot "'
+                    + snapname + '"');
             }
             deletes--;
             callback(delete_err);
         });
     },
     function (err) {
-        t.ok(!err, 'no errors deleting 50 snapshots'
-            + (err ? ': ' + err.message : ''));
+        common.ifError(t, err, 'deleting 50 snapshots');
         if (err) {
             abort = true;
         }
@@ -774,7 +767,8 @@ function (t) {
     vasync.pipeline({funcs: [
         function (_, cb) {
             VM.load(vmobj.uuid, function (err, obj) {
-                t.ok(!err, 'loading VM before last_modified snapshot');
+                common.ifError(t, err,
+                    'loading VM before last_modified snapshot');
                 if (!err) {
                     pre_snap_timestamp = obj.last_modified;
                 }
@@ -783,13 +777,14 @@ function (t) {
         }, function (_, cb) {
             setTimeout(function () {
                 createSnapshot(t, vmobj.uuid, 'modifyme', 1, function (err) {
-                    t.ok(!err, 'created snapshot for last_modified test');
+                    common.ifError(t, err,
+                        'created snapshot for last_modified test');
                     cb(err);
                 });
             }, 1000);
         }, function (_, cb) {
             VM.load(vmobj.uuid, function (err, obj) {
-                t.ok(!err, 'loaded VM after snapshot');
+                common.ifError(t, err, 'loaded VM after snapshot');
                 if (!err) {
                     post_snap_timestamp = obj.last_modified;
                 }
@@ -798,13 +793,14 @@ function (t) {
         }, function (_, cb) {
             setTimeout(function () {
                 deleteSnapshot(t, vmobj.uuid, 'modifyme', 0, function (err) {
-                    t.ok(!err, 'deleted snapshot for last_modified test');
+                    common.ifError(t, err,
+                        'deleted snapshot for last_modified test');
                     cb(err);
                 });
             }, 1000);
         }, function (_, cb) {
             VM.load(vmobj.uuid, function (err, obj) {
-                t.ok(!err, 'loaded VM after delete snapshot');
+                common.ifError(t, err, 'loaded VM after delete snapshot');
                 if (!err) {
                     post_delete_timestamp = obj.last_modified;
                 }
@@ -842,7 +838,8 @@ test('create/delete joyent-minimal snapshot should handle mounting '
         function (_, cb) {
             createSnapshot(t, vmobj.uuid, snapname, vmobj.snapshots.length + 1,
                 function (err) {
-                    t.ok(!err, 'created snapshot for last_modified test');
+                    common.ifError(t, err,
+                        'created snapshot for last_modified test');
                     cb(err);
                 }
             );
@@ -860,7 +857,7 @@ test('create/delete joyent-minimal snapshot should handle mounting '
             });
         }, function (_, cb) {
             deleteSnapshot(t, vmobj.uuid, snapname, 0, function (err) {
-                t.ok(!err, 'deleted ' + snapname + ' snapshot for '
+                common.ifError(t, err, 'deleted ' + snapname + ' snapshot for '
                     + vmobj.uuid);
                 cb(err);
             });
@@ -877,7 +874,7 @@ test('create/delete joyent-minimal snapshot should handle mounting '
             });
         }
     ]}, function (err) {
-        t.ok(!err, 'testing /checkpoints: ' + (err ? err.message : 'success'));
+        common.ifError(t, err, 'testing /checkpoints');
         t.end();
     });
 });
@@ -934,8 +931,8 @@ test('create stopped joyent-minimal VM', function (t) {
         } else {
             t.ok(true, 'VM created with uuid ' + obj.uuid);
             VM.load(obj.uuid, function (e, o) {
-                t.ok(!err, 'loading VM after create');
-                if (!err) {
+                common.ifError(t, e, 'loading VM after create');
+                if (!e) {
                     t.ok(o.snapshots.length === 0, 'no snapshots after create');
                     t.ok(o.hasOwnProperty('zfs_filesystem'),
                         'has zfs_filesystem');
@@ -959,7 +956,7 @@ function (t) {
     }
 
     VM.create_snapshot(vmobj.uuid, 'shouldntmount', {}, function (err) {
-        t.ok(!err, 'no error creating snapshot of ' + vmobj.uuid);
+        common.ifError(t, err, 'creating snapshot of ' + vmobj.uuid);
         VM.load(vmobj.uuid, function (e, o) {
             t.ok(!e, 'loading VM after create');
             if (!e) {
@@ -1026,8 +1023,8 @@ function (t) {
         } else {
             t.ok(true, 'VM created with uuid ' + obj.uuid);
             VM.load(obj.uuid, function (e, o) {
-                t.ok(!err, 'loading VM after create');
-                if (!err) {
+                common.ifError(t, e, 'loading VM after create');
+                if (!e) {
                     t.ok(o.snapshots.length === 0, 'no snapshots after create');
                     t.ok(o.hasOwnProperty('zfs_filesystem'),
                         'has zfs_filesystem');
@@ -1080,8 +1077,7 @@ test('snapshot zone with garbage metadata.sock', function (t) {
 
     execFile('/usr/sbin/zfs',
         ['snapshot', vmobj.zfs_filesystem + '@garbage_mdata'], function (err) {
-        t.ok(!err, 'create garbage_mdata snapshot: '
-            + (err ? err.message : 'success'));
+        common.ifError(t, err, 'create garbage_mdata snapshot');
         t.end();
     });
 });
@@ -1096,7 +1092,7 @@ test('boot zone with garbage metadata.sock, try mdata-get', function (t) {
 
     // we boot with zoneadm to mimic marlin-agent
     execFile('/usr/sbin/zoneadm', ['-z', vmobj.uuid, 'boot'], function (err) {
-        t.ok(!err, 'boot zone: ' + (err ? err.message : 'success'));
+        common.ifError(t, err, 'boot zone');
         // Try to load our own uuid from metadata. Should work because this
         // will be first boot and metadata agent will create its socket the
         // first time replacing our garbage one.
@@ -1120,7 +1116,7 @@ test('rollback to garbage snapshot, try mdata-get again', function (t) {
 
     // we halt with zoneadm to mimic marlin-agent
     execFile('/usr/sbin/zoneadm', ['-z', vmobj.uuid, 'halt'], function (err) {
-        t.ok(!err, 'halt zone: ' + (err ? err.message : 'success'));
+        common.ifError(t, err, 'halt zone');
         execFile('/usr/sbin/zfs',
             ['rollback', vmobj.zfs_filesystem + '@garbage_mdata'],
             function (e) {
@@ -1149,6 +1145,90 @@ test('rollback to garbage snapshot, try mdata-get again', function (t) {
     });
 });
 
+test('modify tags and rollback', function (t) {
+    t.ok(vmobj, 'have vmobj');
+
+    if (!vmobj) {
+        t.end();
+        return;
+    }
+
+    var firstTags = {
+        foo: 1
+    };
+    var secondTags = {
+        foo: 2
+    };
+
+    vasync.pipeline({funcs: [
+        // Set the initial tags
+        function (_, cb) {
+            VM.update(vmobj.uuid, {set_tags: firstTags}, function (err) {
+                common.ifError(t, err, 'VM.update first tags');
+                cb(err);
+            });
+        },
+
+        // Ensure the first set worked
+        function (_, cb) {
+            VM.load(vmobj.uuid, function (err, o) {
+                common.ifError(t, err, 'loading VM after update first tags');
+                t.deepEqual(o.tags, firstTags, 'first tags are correct');
+                cb(err);
+            });
+        },
+
+        // Create a snapshot
+        function (_, cb) {
+            VM.create_snapshot(vmobj.uuid, 'initial-tags-snap', {},
+                function (err) {
+
+                common.ifError(t, err, 'VM.create_snapshot initial-tags-snap');
+                cb(err);
+            });
+        },
+
+        // Set the second set of tags
+        function (_, cb) {
+            VM.update(vmobj.uuid, {set_tags: secondTags}, function (err) {
+                common.ifError(t, err, 'VM.update second tags');
+                cb(err);
+            });
+        },
+
+        // Ensure the second tags set worked
+        function (_, cb) {
+            VM.load(vmobj.uuid, function (err, o) {
+                common.ifError(t, err, 'loading VM after update second tags');
+                t.deepEqual(o.tags, secondTags, 'second tags are correct');
+                cb(err);
+            });
+        },
+
+        // Rollback the VM
+        function (_, cb) {
+            VM.rollback_snapshot(vmobj.uuid, 'initial-tags-snap', {},
+                function (err) {
+
+                common.ifError(t, err, 'VM.rollback initial-tags-snap');
+                cb(err);
+            });
+        },
+
+        // Ensure the tags have now reverted to the first set
+        function (_, cb) {
+            VM.load(vmobj.uuid, function (err, o) {
+                common.ifError(t, err, 'loading VM after rollback');
+                t.deepEqual(o.tags, firstTags, 'rollback tags are correct');
+                cb(err);
+            });
+        }
+    ]}, function (err) {
+        common.ifError(t, err, 'test modify tags and rollback');
+        t.end();
+    });
+});
+
 test('delete VM with garbage snapshot', function (t) {
     t.ok(vmobj, 'have vmobj');
 
@@ -1158,8 +1238,364 @@ test('delete VM with garbage snapshot', function (t) {
     }
 
     VM.delete(vmobj.uuid, function (err) {
-        t.ok(!err, 'delete VM: ' + (err ? err.message : 'success'));
+        common.ifError(t, err, 'delete VM');
         t.end();
         vmobj = {};
     });
+});
+
+function waitForUserScript(uuid, callback) {
+    var watchObj = {
+        uuid: uuid
+    };
+
+    var changes = [
+        {
+            path: ['customer_metadata', 'userScriptHasRun'],
+            action: 'changed',
+            oldValue: 'false',
+            newValue: 'true'
+        }
+    ];
+
+    var opts = {
+        timeout: 300 * 1000,
+        teardown: true
+    };
+
+    var vs = new vminfod.VminfodEventStream();
+    vs.watchForChanges(watchObj, changes, opts, callback);
+}
+
+
+// To observe file changes on bhyve disks, we use a user-script to
+// read relevant files and mdata-put their contents, allowing us to
+// observe the files from the global zone.
+test('create bhyve VM', function (t) {
+    var payload = {
+        alias: 'test-snapshots-' + process.pid,
+        brand: 'bhyve',
+        autoboot: true,
+        do_not_inventory: true,
+        ram: 128,
+        flexible_disk_size: 13824,
+        disks: [
+            {
+                boot: true,
+                image_uuid: vmtest.CURRENT_BHYVE_CENTOS_UUID,
+                model: 'virtio'
+            },
+            {
+                size: 512,
+                model: 'virtio'
+            }
+        ],
+        customer_metadata: {
+            'user-script': [
+                'DISK0_TMP_DIR="/mnt/tmp"',
+                'DISK0_TMP_FILE="/mnt/tmp/snapshot-test.txt"',
+                'DISK1_TMP_FILE="/snapshot-test.txt"',
+                'mdata-put userScriptHasRun "false"',
+                'if [ -f $DISK0_TMP_FILE ]; then',
+                '    echo -n "newString" > $DISK0_TMP_FILE',
+                'else',
+                '    mkdir $DISK0_TMP_DIR',
+                '    echo -n "oldString" > $DISK0_TMP_FILE',
+                'fi;',
+                'if [ -f $DISK1_TMP_FILE ]; then',
+                '   echo -n "newString" > $DISK1_TMP_FILE',
+                'else',
+                '   echo -n "oldString" > $DISK1_TMP_FILE',
+                'fi;',
+                'cat $DISK0_TMP_FILE | mdata-put disk0test',
+                'cat $DISK1_TMP_FILE | mdata-put disk1test',
+                'sync',
+                'mdata-put userScriptHasRun "true"'
+            ].join('\n')
+        }
+    };
+
+    VM.create(payload, function (err, obj) {
+        common.ifError(t, err, 'error creating VM');
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        t.ok(true, 'VM created with uuid ' + obj.uuid);
+
+        vmobj = obj;
+
+        waitForUserScript(vmobj.uuid, function onUserScript(e) {
+            common.ifError(t, e, 'error waiting for user script');
+            if (e) {
+                abort = true;
+                t.end();
+                return;
+            }
+
+            t.end();
+        });
+    });
+});
+
+test('verify metadata', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping verification as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.load(vmobj.uuid, function onLoaded(err, obj) {
+        common.ifError(t, err, 'loading VM after create');
+
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        t.ok(obj.snapshots.length === 0, 'VM has no snapshots');
+        t.ok(obj.customer_metadata.disk0test === 'oldString',
+                'File written to disk0');
+        t.ok(obj.customer_metadata.disk1test === 'oldString',
+                'File written to disk1');
+        t.end();
+    });
+});
+
+test('take snapshot', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping snapshot as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.create_snapshot(vmobj.uuid, 'snapshot1', {}, function (err) {
+        common.ifError(t, err, 'creating snapshot of ' + vmobj.uuid);
+
+        VM.load(vmobj.uuid, function (e, o) {
+            common.ifError(t, e, 'loading VM after create snapshot');
+
+            if (e) {
+                abort = true;
+                t.end();
+                return;
+            }
+
+            t.ok(o.snapshots.length === 1,
+                '1 snapshot after create snapshot');
+            t.ok(hasSnapshot(o.snapshots, 'snapshot1'),
+                'snapshot1 after create snapshot');
+            t.end();
+        });
+    });
+});
+
+test('reboot to change file', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping reboot as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.reboot(vmobj.uuid, {}, function (err) {
+        common.ifError(t, err, 'rebooting vm');
+
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        waitForUserScript(vmobj.uuid, function onUserScript(e) {
+            common.ifError(t, e, 'error waiting for user script');
+
+            if (e) {
+                abort = true;
+            }
+
+            t.end();
+        });
+    });
+});
+
+test('verify updated metadata', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping verification as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.load(vmobj.uuid, function onLoaded(err, obj) {
+        common.ifError(t, err, 'loading vm');
+
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        t.ok(obj.customer_metadata.disk0test === 'newString',
+            'disk0 file updates');
+        t.ok(obj.customer_metadata.disk1test === 'newString',
+            'disk1 file updates');
+        t.end();
+    });
+});
+
+test('rollback to snapshot1 and verify metadata', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping rollback as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.rollback_snapshot(vmobj.uuid, 'snapshot1', {do_not_start: true},
+        function (err) {
+            common.ifError(t, err, 'error rolling back snapshot');
+
+            VM.load(vmobj.uuid, function (e, o) {
+                common.ifError(t, e, 'loading vm after rollback');
+                if (e) {
+                    abort = true;
+                    t.end();
+                    return;
+                }
+
+                t.ok(o.snapshots.length === 1,
+                    '1 snapshot remains after rollback');
+                t.ok(hasSnapshot(o.snapshots, 'snapshot1'),
+                    'snapshot1 after rollback');
+                // verifies that the zoneroot gets rolled back
+                t.ok(o.customer_metadata.disk0test === 'oldString',
+                    'disk0 metadata gets rolled back');
+                t.ok(o.customer_metadata.disk1test === 'oldString',
+                    'disk1 metadata gets rolled back');
+                t.end();
+            });
+        }
+    );
+});
+
+test('clear metadata keys and change user-script', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping metadata update as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.update(vmobj.uuid, {
+        remove_customer_metadata: ['disk0test', 'disk1test'],
+        set_customer_metadata: {
+            'user-script': 'mdata-put userScriptHasRun "false"; '
+                + 'cat /mnt/tmp/snapshot-test.txt | '
+                + 'mdata-put disk0test; '
+                + 'cat /snapshot-test.txt | mdata-put disk1test; '
+                + 'mdata-put userScriptHasRun "true"'
+        }
+    }, function (err) {
+        common.ifError(t, err, 'error updating customer_metadata');
+
+        VM.load(vmobj.uuid, function onLoaded(e, o) {
+            common.ifError(t, e, 'loading VM after updating metadata');
+            if (e) {
+                abort = true;
+                t.end();
+                return;
+            }
+
+            t.ok(o.customer_metadata.disk0test === undefined,
+                'disk0 metdata was cleared');
+            t.ok(o.customer_metadata.disk1test === undefined,
+                'disk1 metdata was cleared');
+
+            t.end();
+        });
+    });
+});
+
+test('start VM and verify files have been rolled back', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping VM start as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.start(vmobj.uuid, {}, {}, function (err) {
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        waitForUserScript(vmobj.uuid, function onUserScript(e) {
+            common.ifError(t, e, 'error waiting for user script');
+            if (e) {
+                abort = true;
+                t.end();
+                return;
+            }
+
+            t.end();
+        });
+    });
+});
+
+test('verify rolled back metadata', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping verification as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    VM.load(vmobj.uuid, function onLoaded(err, obj) {
+        common.ifError(t, err, 'loading VM after start');
+
+        if (err) {
+            abort = true;
+            t.end();
+            return;
+        }
+
+        t.ok(obj.customer_metadata.disk0test === 'oldString',
+            'file on disk0 was successfully rolled back');
+        t.ok(obj.customer_metadata.disk1test === 'oldString',
+            'file on disk1 was successfully rolled back');
+        t.end();
+    });
+});
+
+test('delete snapshot1 from bhyve', function (t) {
+    if (abort) {
+        t.ok(false, 'skipping deletion as test run is aborted.');
+        t.end();
+        return;
+    }
+
+    deleteSnapshot(t, vmobj.uuid, 'snapshot1', 0, function (err) {
+        common.ifError(t, err, 'deleting snapshot1 of ' + vmobj.uuid);
+        if (err) {
+            abort = true;
+        }
+        t.end();
+    });
+});
+
+test('delete bhyve VM', function (t) {
+    if (vmobj.uuid) {
+        VM.delete(vmobj.uuid, function (err) {
+            common.ifError(t, err, 'error deleting VM');
+
+            if (!err) {
+                t.ok(true, 'deleted VM: ' + vmobj.uuid);
+            }
+
+            t.end();
+        });
+    } else {
+        t.ok(false, 'no VM to delete');
+        t.end();
+    }
 });

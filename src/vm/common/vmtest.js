@@ -1,9 +1,33 @@
-//
-// Copyright 2018 Joyent, Inc.  All rights reserved.
-//
-// This is the common set of functions for things like ensuring we have a
-// SmartOS and Ubuntu image to work with.
-//
+/*
+ * CDDL HEADER START
+ *
+ * The contents of this file are subject to the terms of the
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at http://smartos.org/CDDL
+ *
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file.
+ *
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
+ *
+ * Copyright (c) 2018, Joyent, Inc.
+ *
+ */
+
+/*
+ * This is the common set of functions for things like ensuring we have a
+ * SmartOS and Ubuntu image to work with.
+ */
 
 process.env['TAP'] = 1;
 var async = require('/usr/node/node_modules/async');
@@ -59,6 +83,8 @@ exports.CURRENT_UBUNTU_NAME = 'ubuntu-10.04';
 exports.CURRENT_UBUNTU_SIZE = 5120;
 exports.CURRENT_UBUNTU_UUID = '71101322-43a5-11e1-8f01-cf2a3031a7f4';
 
+// centos-bhyve-7
+exports.CURRENT_BHYVE_CENTOS_UUID = '462d1d03-8457-e134-a408-cf9ea2b9be96';
 
 exports.on_new_vm = function(t, uuid, payload, state, fnlist, callback)
 {
@@ -113,7 +139,7 @@ exports.on_new_vm = function(t, uuid, payload, state, fnlist, callback)
         if (state.hasOwnProperty('uuid')) {
             VM.delete(state.uuid, function (err) {
                 if (err) {
-                    if (err.message.match(/No such zone configured/)) {
+                    if (err.code === 'ENOENT') {
                         t.ok(true, 'tried to delete VM ' + state.uuid
                             + ' but it was already gone.');
                     } else {
@@ -196,3 +222,29 @@ function checkDefaultZfsProperties(t, dataset, message, callback) {
         callback();
     });
 };
+
+/*
+ * Adapted from usr/src/lib/libzfs/common/libzfs_dataset.c and related headers.
+ */
+var SPA_BLKPTRSHIFT = 7;        /* blkptr_t is 128 bytes */
+var SPA_DVAS_PER_BP = 3;        /* Number of DVAs in a bp */
+var DN_MAX_INDBLKSHIFT = 17;    /* 128k */
+var DNODES_PER_LEVEL_SHIFT = DN_MAX_INDBLKSHIFT - SPA_BLKPTRSHIFT;
+var DNODES_PER_LEVEL = 1 << DNODES_PER_LEVEL_SHIFT;
+
+exports.zvol_volsize_to_reservation =
+function zvol_volsize_to_reservation(volsize, volblocksize, copies) {
+    var blocks = volsize / volblocksize;
+    var numdb = 7;
+
+    while (blocks > 1) {
+        blocks = Math.floor((blocks + DNODES_PER_LEVEL - 1) / DNODES_PER_LEVEL);
+        numdb += blocks;
+    }
+
+    numdb *= Math.min(SPA_DVAS_PER_BP, copies + 1);
+    volsize *= copies;
+
+    numdb *= 1 << DN_MAX_INDBLKSHIFT;
+    return (volsize + numdb);
+}

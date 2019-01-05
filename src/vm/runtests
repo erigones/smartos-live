@@ -35,7 +35,8 @@ test_errors=0
 failed_tests=
 
 pwd=$(unset CDPATH; cd $(dirname $0); pwd)
-for test in $(ls $pwd/tests | grep "\.js$"); do
+for test in "$pwd/tests"/test-*.js; do
+    test=${test##*/}
     set +o errexit
     set -o pipefail
     (/usr/vm/test/runtest $pwd/tests/${test} 2>&1) > >(tee -a /tmp/test.output.$$)
@@ -54,6 +55,7 @@ elapsed=$((${end_time} - ${start_time}))
 tests=$(grep "^# tests [0-9]" /tmp/test.output.$$ | cut -d ' ' -f3 | xargs | tr ' ' '+' | bc)
 passed=$(grep "^# pass  [0-9]" /tmp/test.output.$$ | tr -s ' ' | cut -d ' ' -f3 | xargs | tr ' ' '+' | bc)
 skipped=$(grep "^# skip  [0-9]" /tmp/test.output.$$ | tr -s ' ' | cut -d ' ' -f3 | xargs | tr ' ' '+' | bc)
+cores=$(grep "^# new core:" /tmp/test.output.$$ | awk '{print $NF}')
 
 [[ -z ${tests} ]] && tests=0
 [[ -z ${passed} ]] && passed=0
@@ -88,6 +90,13 @@ if [[ -n ${failed_tests} ]]; then
     echo "#  ** FAILED TESTS **"
     for test in ${failed_tests}; do
         echo -e "#  ${FAIL_COLOR}${test}${NORMAL_COLOR}"
+    done
+fi
+if [[ -n "$cores" ]]; then
+    echo "#"
+    echo "# ** NEW CORE FILES **"
+    for core in $cores; do
+        echo -e "#  ${FAIL_COLOR}${core}${NORMAL_COLOR}"
     done
 fi
 echo "#"

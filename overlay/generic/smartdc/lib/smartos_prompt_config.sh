@@ -6,7 +6,7 @@
 #
 
 #
-# Copyright (c) 2017, Joyent, Inc.
+# Copyright (c) 2018, Joyent, Inc.
 #
 
 # XXX - TODO
@@ -48,6 +48,30 @@ declare -a states
 declare -a nics
 declare -a assigned
 declare prmpt_str
+
+#
+# Generate a horizontal ruler of appropriate length.  Doing this each time we
+# emit a ruler appears to induce a surprisingly noticeable latency, so we just
+# do it once.
+#
+ruler=
+while (( ${#ruler} < 80 )); do
+	ruler+='-'
+done
+
+#
+# Determine whether we need a trailing newline after the horizontal ruler.  It
+# would seem that most modern terminal emulators behave like the VT100: if the
+# cursor has naturally progressed to the rightmost column _and_ the next
+# character is a newline, the terminal will discard what is effectively a
+# redundant newline.  Unfortunately, the framebuffer terminal emulator in
+# illumos does not currently do this.  Attempt to guess if we are attached to a
+# serial line or not, so as to decide whether we should send the extra newline.
+#
+console=$(bootparams | awk -F= '$1 == "console" { print $2 }')
+if [[ $(/bin/tty) != '/dev/console' ]] || [[ $console =~ ^tty ]]; then
+	ruler+='\n'
+fi
 
 nicsup_done=0
 
@@ -500,13 +524,19 @@ promptnic()
     val=$mac_addr
 }
 
+readpw()
+{
+	IFS='' read -r -s pw
+	printf '%s' "$pw"
+}
+
 promptpw()
 {
 	def="$3"
 	key="$4"
 
 	if [[ -n ${key} ]]; then
-		preset_val=$(getanswer "${key}")
+		preset_val="$(getanswer "${key}")"
 	fi
 
 	trap "" SIGINT
@@ -514,16 +544,14 @@ promptpw()
 		val=""
 		while [ -z "$val" ]; do
 			if [[ -n ${preset_val} ]]; then
-				val=${preset_val}
+				val="${preset_val}"
 			else
 				if [ -z "$def" ]; then
 					printf "%s: " "$1"
 				else
 					printf "%s [enter to keep existing]: " "$1"
 				fi
-				stty -echo
-				read val
-				stty echo
+				val="$(readpw)"
 				echo
 			fi
 			if [ -n "$val" ]; then
@@ -537,7 +565,7 @@ promptpw()
 				fi
 			else
 				if [ -n "$def" ]; then
-					val=$def
+					val="$def"
 					return
 				else
 					echo "A value must be provided."
@@ -548,12 +576,10 @@ promptpw()
 		cval=""
 		while [ -z "$cval" ]; do
 			if [[ -n ${preset_val} ]]; then
-				cval=${preset_val}
+				cval="${preset_val}"
 			else
 				printf "%s: " "Confirm password"
-				stty -echo
-				read cval
-				stty echo
+				cval="$(readpw)"
 				echo
 			fi
 			[ -n "$cval" ] && break
@@ -576,32 +602,37 @@ updatenicstates()
 	done < <(dladm show-phys -po link,state 2>/dev/null)
 }
 
+printruler()
+{
+	#
+	# Print the horizontal ruler we have generated for this terminal.  Note
+	# that the ruler string is a printf(1) format string which may include
+	# a newline escape sequence.
+	#
+	printf -- "$ruler"
+}
+
 printheader()
 {
-	local newline=
-	local cols=`tput cols`
 	local subheader=$1
 
 	if [[ $(getanswer "simple_headers") == "true" ]]; then
-	echo "> ${subheader}"
-	return
-	fi
-
-	if [ $cols -gt 80 ] ;then
-	newline='\n'
+		echo "> ${subheader}"
+		return
 	fi
 
 	clear
 	printf " %-40s\n" "SmartOS Setup"
 	printf " %-40s%38s\n" "$subheader" "https://wiki.smartos.org/install"
-	for i in {1..80} ; do printf "-" ; done && printf "$newline"
+
+	printruler
 }
 
 print_warning()
 {
 	clear
 	printf "WARNING\n"
-	for i in {1..80} ; do printf "-" ; done && printf "\n"
+	printruler
 	printf "\n$1\n"
 
 	prmpt_str="\nPress [enter] to continue "

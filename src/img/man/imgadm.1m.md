@@ -340,6 +340,13 @@ UUID.
         to a given image repository (IMGAPI) via "-p URL". This can also be
         done separately via "imgadm publish".
 
+        Note: When creating an image from a VM with brand 'bhyve', 'lx', or
+        'kvm', the resulting manifest will have requirements.brand set to match
+        the brand of the source VM. If this is undesirable, the
+        requirements.brand can be set (optionally empty if the resulting image
+        should not have this value set) in the manifest passed with the '-m'
+        option.
+
         Options:
             -h, --help     Print this help and exit.
             -m <manifest>  Path to image manifest data (as JSON) to
@@ -354,7 +361,7 @@ UUID.
                            then "PATH.imgmanifest" and "PATH.zfs[.EXT]" are
                            created.
             -c <comp>, --compression=<comp>
-                           One of "none", "gz", "bzip2" or "xz" for the compression
+                           One of "none", "gzip", "bzip2" or "xz" for the compression
                            to use on the image file, if any. Default is "none".
             -i             Build an incremental image (based on the "@final"
                            snapshot of the source image for the VM).
