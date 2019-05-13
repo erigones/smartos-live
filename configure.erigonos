@@ -12,11 +12,11 @@ mkdir -p projects/local
 if [[ ! -f configure-branches ]]; then
     cat >configure-branches <<EOF
 # after editing, rerun configure
-illumos-live: master
-illumos-extra: master
-illumos-joyent: master
-kvm: master
-kvm-cmd: master
+illumos-live: new_release_20190328
+illumos-extra: new_release_20190328
+illumos-joyent: new_release_20190328
+kvm: live-migration-joyent
+kvm-cmd: live-migration-joyent
 mdata-client: master
 EOF
 fi
