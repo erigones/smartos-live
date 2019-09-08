@@ -5,7 +5,6 @@
 ```
 git clone https://github.com/joyent/smartos-live.git
 cd smartos-live
-cp sample.configure.smartos configure.smartos
 ./configure
 gmake world
 gmake live
@@ -16,9 +15,8 @@ ls output/
 This repository is smartos-live, which builds a SmartOS platform image
 containing the illumos core OS components; a set of "extra" mostly
 third-party software required by illumos, by other SmartOS software, or
-for system management; a collection of utilities comprising
-SmartOS-specific functionality found in `projects/local/`; and
-implementation-specific overlays that deliver additional files verbatim.
+for system management; and a collection of utilities comprising
+SmartOS-specific functionality found in `projects/local/`.
 
 ## Contents
 
@@ -41,28 +39,6 @@ the root of SmartOS. It has logic for how to build all of the different
 components that make up SmartOS and has components that are specific to
 the SmartOS live image environment. For example, it has tools like
 `vmadm` and `imgadm`.
-
-#### overlay
-
-In smartos-live, there is a directory called [overlay](/overlay) that
-contains two different things:
-
-1. Files that we use in place of the standard ones provided by another
-part of the system. This is often done for files that come from
-illumos-joyent so as to minimize the differences we have from upstream.
-For example, we have replacements for the `/etc/name_to_major` and
-`/etc/driver_aliases` files.
-
-2. There are some additional files that are found here that don't
-currently have another, better home.
-
-Historically, there were multiple overlays that were switched between
-when building the SmartOS platform for use in Triton or as a standalone
-image. Today, there is only one overlay used, the
-[generic](/overlay/generic) overlay.
-
-When the platform image is built, the generic overlay directory is
-searched for files ahead of the normal proto area used by builder.
 
 ### illumos-joyent
 
@@ -238,6 +214,10 @@ $
 With this, you should be all set in your new environment. The normal
 build process will make sure that any required packages are installed.
 
+If you're running any of the release-engineering targets, the build will
+also require Manta tools and `updates-imgadm` to be available on `$PATH`,
+but most users are unlikely to need to build these targets.
+
 ### Basic Build Pattern
 
 Once the build zone has been configured, you can kick off a build in a
@@ -246,7 +226,6 @@ few easy steps:
 ```
 $ git clone git://github.com/joyent/smartos-live
 $ cd smartos-live
-$ cp sample.configure.smartos configure.smartos
 $ ./configure
 $ gmake live
 ```
@@ -270,9 +249,9 @@ to the VGA console. To make an ISO or USB image you can run from the
 root of the smartos-live repository:
 
 ```
-$ ./tools/build_iso
-$ ./tools/build_usb
-$ ./tools/build_iso -c ttyb # sets the default console to ttyb
+$ ./tools/build_boot_image -r $ROOT
+$ ./tools/build_boot_image -I -r $ROOT
+$ ./tools/build_boot_image -I -r $ROOT -c ttyb # sets the default console to ttyb
 ```
 
 These will create images in the `output-usb` and `output-iso`
@@ -303,6 +282,74 @@ The following summarizes the primary targets used on a day to day basis:
 * `update`: Updates all of the repositories to the latest
 * `iso`: Builds a CD-ROM ISO image, defaulting to the VGA console
 * `usb`: Builds a FAT 32 USB image, defaulting to the VGA console
+
+### Build Targets for Release Engineering
+
+This section is likely to only interest users who perform release builds
+of SmartOS, or the Triton Platform Image.
+
+When performing release builds, the following are convenient targets
+which encapsulate the entire release process for a specific Triton
+and/or SmartOS build variety:
+
+* `common-release`: depends on `check`, `live` and `pkgsrc` targets and
+   needs to be run before a subsequent `make` invocation of any of
+   the `-release` targets below
+* `smartos-release`: builds, publishes and uploads SmartOS artifacts
+* `triton-release`: builds, publishes and uploads a Triton platform
+  image
+* `triton-and-smartos-release`: all of the above
+
+The following are used by the targets listed above as part of the
+release engineering process when publishing release builds of the
+SmartOS and Triton platform image. There are varieties of each target
+for both build flavors.
+
+* `*-publish`: stage bits from the output directory, preparing for
+  upload
+* `*-bits-upload`: upload bits to either Manta, a remote filesystem
+  and optionally, a Triton imgapi instance, defaulting to
+  `updates.joyent.com`
+* `*-bits-upload-latest`: as above, except attempt to re-upload the
+  latest built bits, useful in case of interrupted uploads
+
+The `bits-upload` tool comes from
+[eng.git](http://github.com/joyent/eng) which the build pulls in via
+the `deps/eng` "git submodule" from the top-level of the workspace.
+
+The upload can be influenced by the following shell environment
+variables:
+
+* `ENGBLD_DEST_OUT_PATH`: The path where we wish to upload bits. This is
+  assumed to be relative to `$MANTA_USER` if using a Manta path.
+  Otherwise this can be set to a local (or NFS) path where we wish to
+  upload build arifacts.
+* `ENGBLD_BITS_UPLOAD_LOCAL`: If set to `true`, this causes us to simply
+  `cp(1)` bits to `$ENGBLD_DEST_OUT_PATH` rather than upload using
+  Manta tools.
+* `ENGBLD_BITS_UPLOAD_IMGAPI`: If set to `true`, this causes the build to
+  also attempt to upload any Triton images found in the `output/bits`
+  directory to an imgapi instance, which defaults to
+  `updates.joyent.com`.
+
+For Manta and imgapi uploads, the following environment variables are
+used to configure the upload:
+
+* `MANTA_USER`
+* `MANTA_KEY_ID`
+* `MANTA_URL`
+* `UPDATES_IMGADM_URL`
+* `UPDATES_IMGADM_IDENTITY`
+* `UPDATES_IMGADM_CHANNEL`
+* `UPDATES_IMGADM_USER`
+
+For details on the default values of these variables, and how they are
+used, see
+[bits-upload.sh](https://github.com/joyent/eng/blob/master/tools/bits-upload.sh)
+
+Finally, release engineers may find the script
+[`build_jenkins`](/tools/build_jenkins) useful, intended to be run
+directly as part of a Jenkins job, invoking the targets above.
 
 ### Common Tasks
 
@@ -352,14 +399,43 @@ enough quality that we could cut a release at any time.
 
 While developing, you may want to use local branches, sometimes there
 are longer lived branches that exist for project development or for
-releases. To automate the configuration of branches, there is a
-`configure-branches` file in the root of the smartos-live repository. If
-you update the branch name that corresponds to a repository and rerun
-`./configure`, it will make sure that every branch is set to the correct
+releases. To automate the configuration of branches when creating the
+`projects` directory, create a file called `configure-projects` in the
+root of the smartos-live repository.
+
+The `configure-projects` file takes the format:
+
+```
+<path relative to ./projects>:<project branch>:[project git repo URL or path]
+```
+
+The special tokens `cr` or `origin` can be used in place of a full git
+repo URL to denote either standard github.com or joyent gerrit URLs for that
+project. If no URL is given, we default to github.com.
+
+If you update the branch name that corresponds to a repository, rerun
+`./configure` to make sure that every branch is set to the correct
 one, except that of smartos-live which needs to be changed manually.
 
 Not all repositories have to be on the same branch. It's totally fine to
 mix and match.
+
+#### Additional build customization
+
+Several variables can also be set in a shell script at the top of the
+smartos-live repository called `configure-build` and are sourced by `configure`
+if this file exists. This allows you to override `configure` script defaults,
+or include additional pre-build customization.
+
+If this file does not exist, the following defaults are set by `configure`:
+
+```
+PUBLISHER="joyent"
+RELEASE_VER="joyent_147"
+ON_CLOSED_BINS_URL="https://us-east.manta.joyent.com/Joyent_Dev/public/releng/illumos/on-closed-bins.i386.tar.bz2"
+ON_CLOSED_BINS_ND_URL="https://us-east.manta.joyent.com/Joyent_Dev/public/releng/illumos/on-closed-bins-nd.i386.tar.bz2"
+ILLUMOS_ADJUNCT_TARBALL_URL="https://us-east.manta.joyent.com/Joyent_Dev/public/releng/adjuncts/illumos-adjunct.20130131.tgz"
+```
 
 #### Debug Builds
 
@@ -385,7 +461,6 @@ would modify the normal workflow as follows:
 ```
 $ git clone git://github.com/joyent/smartos-live
 $ cd smartos-live
-$ cp sample.configure.smartos configure.smartos
 $ ./configure -d
 $ gmake live
 ```
@@ -511,7 +586,6 @@ $ cd projects/illumos-extra/binutils
 $ STRAP= \
   CTFMERGE=/home/rm/src/mdb_v8/projects/illumos/usr/src/tools/proto/*/opt/onbld/bin/i386/ctfmerge \
   CTFCONVERT=/home/rm/src/mdb_v8/projects/illumos/usr/src/tools/proto/*/opt/onbld/bin/i386/ctfconvert \
-  ALTCTFCONVERT=/home/rm/src/mdb_v8/projects/illumos/usr/src/tools/proto/*/opt/onbld/bin/i386/ctfconvert-altexec \
   gmake DESTDIR=/home/rm/src/mdb_v8/proto install
 ```
 
@@ -597,13 +671,17 @@ multiple repositories at once.
 
 #### Device Drivers
 
-Device drivers represent a slight exception to the normal rules. While
-they should be added to the standard manifest directory, they also need
-to be added to two files in smartos-live. Specifically, the driver
-should be listed in `overlay/generic/etc/name_to_major` and assigned the
-next free major number. Any aliases for the driver, devices which the
-driver should attach to, should be added to
-`overlay/generic/etc/driver_aliases`.
+For SmartOS, adding a device driver involves updating files that are
+assembled at run-time under vanilla illumos. You should check and update if
+necessary the following files under `projects/illumos`:
+
+```
+usr/src/uts/intel/os/device_policy
+usr/src/uts/intel/os/driver_aliases
+usr/src/uts/intel/os/driver_classes
+usr/src/uts/intel/os/name_to_major
+usr/src/uts/intel/os/minor_perm
+```
 
 ## Testing and Things to Think About
 
@@ -717,11 +795,10 @@ tested this on older platform images?
 You can interact with the SmartOS community in a number of ways. This
 includes:
 
-* The *smartos-discuss* mailing list. Once you [subscribe to the
-  list](https://www.listbox.com/subscribe/?list_id=184463), you can send mail to
-  the list address: smartos-discuss@lists.smartdatacenter.org.
-  The mailing list archives are also [available on the
-  web](https://www.listbox.com/member/archive/184463/=now).
+* The *smartos-discuss*
+  [mailing list](https://smartos.topicbox.com/groups/smartos-discuss).
+  If you wish to send mail to the list you'll need to join, but you can view
+  and search the archives online without being a member.
 
 * In the *#smartos* IRC channel on the [Freenode IRC
   network](https://freenode.net/).
