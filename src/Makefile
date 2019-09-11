@@ -293,13 +293,16 @@ BUILT_TARGETS = \
 	disklayout \
 	disklist \
 	disk_size \
+	execsnoop \
 	fssstat \
 	fswatcher \
 	json \
 	mkzpool \
 	nomknod.so.32 \
 	nomknod.so.64 \
+	opensnoop \
 	removable_disk \
+	set-root-password \
 	sysevent \
 	sysinfo_mod.so \
 	vm/node_modules/props.js \
@@ -350,6 +353,7 @@ LIBSDC_TARGETS = \
 	lib/sdc/zone.sh
 
 ETC_TARGETS = \
+	etc/motd \
 	etc/nodename \
 	etc/notices/COPYRIGHT \
 	etc/rtc_config \
@@ -388,7 +392,7 @@ install: all $(SUBDIRS)
 	mkdir -p $(DESTDIR)/usr/bin
 	cp -p $(TARGETS) $(DESTDIR)/usr/bin
 	mkdir -p $(DESTDIR)/usr/sbin
-	cp -p fssstat sysevent zonememstat zonemon $(DESTDIR)/usr/sbin
+	cp -p fssstat sysevent zonememstat zonemon opensnoop execsnoop set-root-password $(DESTDIR)/usr/sbin
 	cp -p $(USR_LIB_TARGETS) $(DESTDIR)/usr/lib
 	mkdir -p $(DESTDIR)/smartdc/bin
 	cp -p $(SMARTDC_TARGETS) $(DESTDIR)/smartdc/bin

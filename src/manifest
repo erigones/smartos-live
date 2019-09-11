@@ -1070,6 +1070,8 @@ s usr/lib/amd64/libdemangle.so=libdemangle.so.1
 f usr/lib/amd64/libiostream.so.1 0755 root bin
 # 0-livesrc-stamp
 f .smartdc_version 0444 root root
+f etc/issue 0644 root sys
+f etc/motd 0644 root sys
 d etc/ssh 0755 root sys
 f etc/ssh/sshd_config 0644 root sys
 f etc/rtc_config 0644 root root
@@ -1112,7 +1114,10 @@ f usr/lib/sysevent/modules/sysinfo_mod.so 0555 root bin
 d usr/lib/sdc 0755 root bin
 f usr/lib/sdc/net-boot-config 0555 root bin
 s usr/sbin/fwadm=../fw/sbin/fwadm
+f usr/sbin/execsnoop 0755 root bin
 f usr/sbin/fssstat 0555 root bin
+f usr/sbin/opensnoop 0755 root bin
+f usr/sbin/set-root-password 0755 root bin
 f usr/sbin/sysevent 0555 root bin
 s usr/sbin/vmadm=../vm/sbin/vmadm
 s usr/sbin/vminfo=../vm/sbin/vminfo
