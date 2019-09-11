@@ -1112,7 +1112,10 @@ f usr/lib/sysevent/modules/sysinfo_mod.so 0555 root bin
 d usr/lib/sdc 0755 root bin
 f usr/lib/sdc/net-boot-config 0555 root bin
 s usr/sbin/fwadm=../fw/sbin/fwadm
+f usr/sbin/execsnoop 0755 root bin
 f usr/sbin/fssstat 0555 root bin
+f usr/sbin/opensnoop 0755 root bin
+f usr/sbin/set-root-password 0755 root bin
 f usr/sbin/sysevent 0555 root bin
 s usr/sbin/vmadm=../vm/sbin/vmadm
 s usr/sbin/vminfo=../vm/sbin/vminfo
