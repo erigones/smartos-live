@@ -353,6 +353,8 @@ LIBSDC_TARGETS = \
 	lib/sdc/zone.sh
 
 ETC_TARGETS = \
+	etc/issue \
+	etc/motd \
 	etc/nodename \
 	etc/notices/COPYRIGHT \
 	etc/rtc_config \
