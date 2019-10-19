@@ -45,6 +45,9 @@
 /src/zfs_recv
 /src/zfs_send
 /src/zoneevent
+/src/execsnoop
+/src/opensnoop
+/src/set-root-password
 /tools/builder/*.o
 /tools/builder/builder
 /tools/builder/users.c
