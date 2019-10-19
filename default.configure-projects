@@ -1,6 +1,6 @@
-illumos-extra: master: origin
-illumos: master: origin
-local/kvm-cmd: master: origin
-local/kvm: master: origin
+illumos-extra: new_release_20191010: https://github.com/erigones/illumos-extra.git
+illumos: new_release_20191010: https://github.com/erigones/illumos-joyent.git
+local/kvm-cmd: live-migration-joyent-20191010: https://github.com/erigones/illumos-kvm-cmd.git
+local/kvm: live-migration-joyent-20191010: https://github.com/erigones/illumos-kvm.git
 local/mdata-client: master: origin
 local/ur-agent: master: origin
