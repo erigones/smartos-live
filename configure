@@ -12,7 +12,7 @@
 #
 
 #
-# Copyright 2019 Joyent, Inc.
+# Copyright 2020 Joyent, Inc.
 #
 shopt -s xpg_echo
 unalias -a
@@ -39,8 +39,8 @@ fi
 #
 # We configure the projects framework using a 'configure-projects' file. This
 # is a plain text file which contains the project name, the branch we wish to
-# build it at, and either a URL to a git repository or a keyword to denote
-# which git repository to use, either 'cr' or 'origin'. See create_projects.
+# build it at, and either a URL to a git repository or 'origin' to denote the
+# github.com/joyent/<repo> location. See create_projects.
 #
 read -r -d '' configure_projects < default.configure-projects
 
@@ -108,19 +108,35 @@ function checkout_project
 			# doesn't confuse our standard parsing of 'git describe' output
 			local branch_desc=$(echo $branch | sed -e 's/\//_/g')
 
-			# We assume the remote is named 'origin', regardless as to whether
-			# it's from cr.joyent.us or github. Our Jenkins instance doesn't
-			# have multi-SCM support, so ./projects won't have 'cr' remotes.
-			git -C ${dir} fetch origin ${branch}:${branch_desc} || \
-				fatal "unable to fetch ${branch} from origin"
+			# We assume the remote is named 'origin'.
+			git -C ${dir} fetch origin ${branch}:${branch_desc}
 
+			# If the above fails, see if the project appears to be a GitHub
+			# PR-xxx branch name, and if so, add the relevant refspec for
+			# pull requests.
+			if [[ $? -ne 0 ]]; then
+				PR_NUMBER=$(echo "${branch}" | sed -nEe 's/^PR-([0-9]+)$/\1/p')
+				if [[ -n "${PR_NUMBER}" ]]; then
+					echo "Branch appears to be from a PR, adding GitHub refspec"
+					echo "    +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/${branch}"
+					git -C ${dir} config --add remote.origin.fetch \
+					    +refs/pull/${PR_NUMBER}/head:refs/remotes/origin/${branch}
+					git -C ${dir} fetch || \
+					    fatal "unable to fetch using PR refspec"
+				else
+					fatal "unable to fetch ${branch} from origin"
+				fi
+			fi
 			git -C ${dir} checkout ${branch_desc} || \
 				fatal "unable to checkout ${branch_desc}"
 		fi
 	fi
 
+	git -C ${dir} --no-pager show -s
 	git -C ${dir} describe --all --long --dirty | egrep -e '-dirty$' &&
 	    echo "Warning: ${dir} contains uncommitted changes!"
+	echo
+
 	return 0
 }
 
@@ -128,9 +144,9 @@ function checkout_project
 # Read a flat file called 'configure-projects' of the form:
 # <project name>:<project branch>:[project git repo URL or path]
 #
-# The special tokens 'cr' or 'origin' can be used in place of a full git
-# repo URL to denote either standard github.com or gerrit URLs for that
-# project. If no URL is given, we default to github.com.
+# The special token 'origin' can be used in place of a full git
+# repo URL to denote the standard github.com URL for that project.
+# If no URL is given, we default to github.com.
 #
 # Once the configure-projects file has been read (or we've parsed the
 # defaults), invoke checkout_project for each one.
@@ -172,9 +188,6 @@ function create_projects
 
 		# process URL keywords
 		case $project_url in
-		'cr')
-			project_url="https://cr.joyent.us/joyent/$git_name"
-			;;
 		'origin'|'')
 			project_url="$git_stem/$git_name"
 			;;

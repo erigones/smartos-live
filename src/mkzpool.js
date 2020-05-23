@@ -1,8 +1,8 @@
 #! /usr/node/bin/node
 
 /*
- * Copyright 2012 Joyent, Inc.  All rights reserved.
- * Copyright 2016 Erigones, s. r. o. All rights reserved.
+ * Copyright 2019 Joyent, Inc.  All rights reserved.
+ * Copyright 2020 Erigones, s. r. o. All rights reserved.
  */
 
 var fs = require('fs');
@@ -29,18 +29,20 @@ var pool;
 var altroot;
 
 var option;
+var opt_e = false;
 var opt_f = false;
-var opt_R = false;
 var opt_efi = false;
-var parser = new getopt.BasicParser('fBR:', process.argv);
+var parser = new getopt.BasicParser('efBR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
-	switch (option.option) {
+    switch (option.option) {
+	case 'e':
+		opt_e = true;
+		break;
 	case 'f':
 		opt_f = true;
 		continue;
     case 'R':
-        opt_R = true;
         altroot = option.optarg;
         continue;
 	case 'B':
@@ -62,23 +64,8 @@ pool = process.argv[parser.optind()];
 json = fs.readFileSync(process.argv[parser.optind() + 1], 'utf8');
 config = JSON.parse(json);
 
-if (opt_efi == true) {
-    zfs.zpool.efi_create(pool, config, opt_f, altroot, function (err) {
-        if (err) {
-            fatal('pool creation failed: ' + err);
-        }
-    });
-} else if (opt_R !== true) {
-    zfs.zpool.create(pool, config, opt_f, function (err) {
-        if (err) {
-            fatal('pool creation failed: ' + err);
-        }
-    });
-} else {
-    zfs.zpool.rcreate(pool, config, opt_f, altroot, function (err) {
-        if (err) {
-            fatal('pool creation failed: ' + err);
-        }
-    });
-}
-
+zfs.zpool.create(pool, config, opt_f, opt_e, altroot, opt_efi, function (err) {
+	if (err) {
+		fatal('pool creation failed: ' + err);
+	}
+});
