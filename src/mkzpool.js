@@ -19,7 +19,7 @@ fatal(msg)
 function
 usage()
 {
-	console.log('usage: ' + process.argv[0] + '[-f] [-B] [-R <altroot>] <pool> <file.json>');
+	console.log('usage: ' + process.argv[0] + '[-Bef] [-R <altroot>] <pool> <file.json>');
 	process.exit(-1);
 }
 
@@ -29,13 +29,17 @@ var pool;
 var altroot;
 
 var option;
+var opt_B = false;
 var opt_e = false;
 var opt_f = false;
 var opt_efi = false;
-var parser = new getopt.BasicParser('efBR:', process.argv);
+var parser = new getopt.BasicParser('BefR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
     switch (option.option) {
+	case 'B':
+		opt_B = true;
+		break;
 	case 'e':
 		opt_e = true;
 		break;

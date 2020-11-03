@@ -288,6 +288,7 @@ BUILT_TARGETS = \
 	nomknod.so.32 \
 	nomknod.so.64 \
 	opensnoop \
+	piadm \
 	removable_disk \
 	set-root-password \
 	sysevent \
@@ -394,7 +395,7 @@ install: all $(SUBDIRS)
 	mkdir -p $(DESTDIR)/usr/bin
 	cp -p $(USRBIN_TARGETS) $(DESTDIR)/usr/bin
 	mkdir -p $(DESTDIR)/usr/sbin
-	cp -p fssstat sysevent zonememstat zonemon opensnoop execsnoop set-root-password $(DESTDIR)/usr/sbin
+	cp -p fssstat piadm sysevent zonememstat zonemon opensnoop execsnoop set-root-password $(DESTDIR)/usr/sbin
 	cp -p $(USR_LIB_TARGETS) $(DESTDIR)/usr/lib
 	mkdir -p $(DESTDIR)/smartdc/bin
 	cp -p $(SMARTDC_TARGETS) $(DESTDIR)/smartdc/bin
