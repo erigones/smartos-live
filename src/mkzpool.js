@@ -2,7 +2,7 @@
 
 /*
  * Copyright 2019 Joyent, Inc.  All rights reserved.
- * Copyright 2020 Erigones, s. r. o. All rights reserved.
+ * Copyright 2021 Erigones, s. r. o. All rights reserved.
  */
 
 var fs = require('fs');
@@ -32,7 +32,6 @@ var option;
 var opt_B = false;
 var opt_e = false;
 var opt_f = false;
-var opt_efi = false;
 var parser = new getopt.BasicParser('BefR:', process.argv);
 
 while ((option = parser.getopt()) !== undefined && !option.error) {
@@ -45,13 +44,10 @@ while ((option = parser.getopt()) !== undefined && !option.error) {
 		break;
 	case 'f':
 		opt_f = true;
-		continue;
-    case 'R':
-        altroot = option.optarg;
-        continue;
-	case 'B':
-		opt_efi = true;
-		continue;
+		break;
+	case 'R':
+		altroot = option.optarg;
+		break;
 	default:
 		usage();
 		break;
@@ -68,7 +64,7 @@ pool = process.argv[parser.optind()];
 json = fs.readFileSync(process.argv[parser.optind() + 1], 'utf8');
 config = JSON.parse(json);
 
-zfs.zpool.create(pool, config, opt_f, opt_e, altroot, opt_efi, function (err) {
+zfs.zpool.create(pool, config, opt_f, opt_e, altroot, opt_B, function (err) {
 	if (err) {
 		fatal('pool creation failed: ' + err);
 	}
